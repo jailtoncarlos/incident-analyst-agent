@@ -199,11 +199,14 @@ function isLinkConnectedTo(l, nodeId) {
 
 // --- Renderização central ---
 function render() {
-  const connected = selectedNode ? getConnected(selectedNode) : null;
+  // Nós conectados ao selecionado (filtrados pelo tipo ativo)
+  const connectedVisible = selectedNode ? getConnectedVisible(selectedNode) : null;
 
   node.style('opacity', d => {
+    // Nó precisa passar no filtro de tipo + busca
     if (!isNodeVisible(d)) return 0.05;
-    if (connected && !connected.has(d.id)) return 0.08;
+    // Se há seleção, só mostra nós conectados (que também passam no filtro)
+    if (connectedVisible && !connectedVisible.has(d.id)) return 0.08;
     return 1;
   });
 
@@ -212,18 +215,36 @@ function render() {
     const tgtNode = nodes.find(n => n.id === (l.target.id || l.target));
     if (!srcNode || !tgtNode) return 0.02;
 
-    // Se há filtro ativo, ambos os nós precisam ser visíveis
+    // Ambos os nós da aresta precisam ser visíveis pelo filtro
     const srcVisible = isNodeVisible(srcNode);
     const tgtVisible = isNodeVisible(tgtNode);
-    if (!srcVisible && !tgtVisible) return 0.02;
+    if (!srcVisible || !tgtVisible) return 0.02;
 
-    // Se há nó selecionado, mostrar apenas arestas conectadas
-    if (connected) {
-      return isLinkConnectedTo(l, selectedNode) && (srcVisible || tgtVisible) ? 0.8 : 0.02;
+    // Se há nó selecionado, mostrar apenas arestas conectadas a ele
+    if (connectedVisible) {
+      return isLinkConnectedTo(l, selectedNode) ? 0.8 : 0.02;
     }
 
-    return (srcVisible || tgtVisible) ? 0.25 : 0.02;
+    return 0.25;
   });
+}
+
+function getConnectedVisible(nodeId) {
+  // Retorna apenas nós conectados que passam no filtro de tipo
+  const connected = new Set([nodeId]);
+  links.forEach(l => {
+    const srcId = l.source.id || l.source;
+    const tgtId = l.target.id || l.target;
+    if (srcId === nodeId) {
+      const tgtNode = nodes.find(n => n.id === tgtId);
+      if (tgtNode && isNodeVisible(tgtNode)) connected.add(tgtId);
+    }
+    if (tgtId === nodeId) {
+      const srcNode = nodes.find(n => n.id === srcId);
+      if (srcNode && isNodeVisible(srcNode)) connected.add(srcId);
+    }
+  });
+  return connected;
 }
 
 // --- Tooltip (hover) ---
@@ -244,7 +265,7 @@ node.on('mouseover', (event, d) => {
 
   // Hover highlight temporário (só se não há nó selecionado)
   if (!selectedNode) {
-    const hovered = getConnected(d.id);
+    const hovered = getConnectedVisible(d.id);
     node.style('opacity', n => {
       if (!isNodeVisible(n)) return 0.05;
       return hovered.has(n.id) ? 1 : 0.08;
@@ -253,7 +274,7 @@ node.on('mouseover', (event, d) => {
       if (!isLinkConnectedTo(l, d.id)) return 0.02;
       const srcNode = nodes.find(n => n.id === (l.source.id || l.source));
       const tgtNode = nodes.find(n => n.id === (l.target.id || l.target));
-      return (srcNode && isNodeVisible(srcNode)) || (tgtNode && isNodeVisible(tgtNode)) ? 0.8 : 0.02;
+      return (srcNode && isNodeVisible(srcNode)) && (tgtNode && isNodeVisible(tgtNode)) ? 0.8 : 0.02;
     });
   }
 })
