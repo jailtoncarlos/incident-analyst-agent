@@ -52,9 +52,15 @@ def build_django_structure(base_dir: Path, config: dict) -> dict:
         app_data['urls'] = _parse_urls(app_dir)
         app_data['templates'] = _find_templates(app_dir)
 
+        # Nível 2: inferir renders por convenção Django (app/template.html)
+        _enrich_renders_by_convention(app_name, app_data)
+
         # Só incluir apps que têm pelo menos um componente
         if any(app_data[k] for k in app_data):
             structure[app_name] = app_data
+
+    # Nível 3: buscar referências inversas em templates ({% url 'view_name' %})
+    _enrich_renders_from_templates(base_dir, apps, structure)
 
     return {'apps': structure}
 
@@ -189,6 +195,10 @@ def _parse_python_file(file_path: Path, app_dir: Path) -> dict[str, dict]:
             meta_model = _extract_meta_model(node)
             if meta_model:
                 entry['meta_model'] = meta_model
+            # Nível 1: Extrair template_name de class-based views
+            class_template = _extract_class_template_name(node)
+            if class_template:
+                entry['renders'] = [class_template]
             result[node.name] = entry
 
     return result
@@ -342,3 +352,121 @@ def _find_templates(app_dir: Path) -> list[str]:
         templates.append(relative)
 
     return templates[:100]  # limitar a 100 templates
+
+
+# ---------------------------------------------------------------------------
+# Nível 1: Extrair template_name de atributo de classe (class-based views)
+# ---------------------------------------------------------------------------
+
+
+def _extract_class_template_name(node: ast.ClassDef) -> str | None:
+    """Extrai template_name de atributo de classe (CBV Django)."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.Assign):
+            for target in child.targets:
+                if (
+                    isinstance(target, ast.Name)
+                    and target.id == 'template_name'
+                    and isinstance(child.value, ast.Constant)
+                    and isinstance(child.value.value, str)
+                ):
+                    return child.value.value
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Nível 2: Inferir renders por convenção Django
+# ---------------------------------------------------------------------------
+
+
+def _enrich_renders_by_convention(app_name: str, app_data: dict) -> None:
+    """Infere renders cruzando nomes de views/models com templates existentes.
+
+    Convenções Django:
+      - View 'visualizar_chamado' → template 'visualizar_chamado.html'
+      - View 'visualizar_chamado' → template 'chamado.html'
+      - App 'centralservicos' → templates em 'centralservicos/*.html'
+      - Model 'Chamado' → template 'chamado.html' ou 'chamado_list.html'
+    """
+    existing_templates = set(app_data.get('templates', []))
+    if not existing_templates:
+        return
+
+    views = app_data.get('views', {})
+    for view_name, view_data in views.items():
+        if view_data.get('renders'):
+            continue  # já tem renders mapeados
+
+        # Candidatos por convenção
+        candidates = [
+            f'{view_name}.html',
+            f'{app_name}/{view_name}.html',
+        ]
+        # Se o nome da view tem prefixo (listar_, visualizar_, etc.), tentar sem prefixo
+        for prefix in ('listar_', 'visualizar_', 'editar_', 'adicionar_', 'cadastrar_', 'detalhe_'):
+            if view_name.startswith(prefix):
+                base = view_name[len(prefix) :]
+                candidates.extend(
+                    [
+                        f'{base}.html',
+                        f'{app_name}/{base}.html',
+                    ]
+                )
+
+        matched = [t for t in candidates if t in existing_templates]
+        if matched:
+            view_data['renders'] = matched
+            logger.debug(f'Convenção: {app_name}.{view_name} → {matched}')
+
+
+# ---------------------------------------------------------------------------
+# Nível 3: Buscar referências inversas em templates
+# ---------------------------------------------------------------------------
+
+
+def _enrich_renders_from_templates(base_dir: Path, apps: dict[str, Path], structure: dict) -> None:
+    """Busca {% url 'view_name' %} nos templates e mapeia template → view.
+
+    Faz o caminho inverso: em vez de "qual template a view usa",
+    descobre "quais views o template referencia" via {% url %} tags.
+    """
+    url_tag_pattern = re.compile(r"\{%\s*url\s+['\"](\w+)['\"]")
+
+    # Construir mapa reverso: url_name → (app_name, view_name)
+    url_name_map: dict[str, tuple[str, str]] = {}
+    for app_name, app_data in structure.get('apps', {}).items():
+        for url_entry in app_data.get('urls', []):
+            view_ref = url_entry.get('view', '')
+            view_name = view_ref.split('.')[-1] if '.' in view_ref else view_ref
+            # Inferir url_name do view_name (convenção Django)
+            url_name_map[view_name] = (app_name, view_name)
+
+    # Percorrer templates de cada app
+    for app_name, app_dir in apps.items():
+        templates_dir = app_dir / 'templates'
+        if not templates_dir.exists():
+            continue
+
+        app_structure = structure.get('apps', {}).get(app_name, {})
+        views = app_structure.get('views', {})
+
+        for html_file in templates_dir.rglob('*.html'):
+            try:
+                content = html_file.read_text(encoding='utf-8', errors='replace')
+            except OSError:
+                continue
+
+            template_name = str(html_file.relative_to(templates_dir))
+
+            # Buscar {% url 'view_name' %} no template
+            for match in url_tag_pattern.finditer(content):
+                url_name = match.group(1)
+                if url_name in url_name_map:
+                    ref_app, ref_view = url_name_map[url_name]
+                    # Se a view referenciada está no mesmo app, associar template
+                    if ref_app == app_name and ref_view in views:
+                        renders = views[ref_view].get('renders', [])
+                        if template_name not in renders:
+                            renders.append(template_name)
+                            views[ref_view]['renders'] = renders
+                            logger.debug(f'Template inverso: {template_name} → {app_name}.{ref_view}')
