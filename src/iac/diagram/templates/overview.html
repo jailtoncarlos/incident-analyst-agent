@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>IAC — Overview do Projeto</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; overflow: hidden; }
+#container { width: 100vw; height: 100vh; position: relative; }
+svg { width: 100%; height: 100%; }
+.controls { position: fixed; top: 12px; left: 12px; z-index: 10; display: flex; gap: 8px; align-items: center; }
+.controls input { padding: 6px 12px; border-radius: 6px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; font-size: 14px; width: 240px; }
+.controls input::placeholder { color: #484f58; }
+.info { position: fixed; bottom: 12px; left: 12px; z-index: 10; font-size: 12px; color: #484f58; }
+.tooltip { position: fixed; padding: 10px 14px; background: #1c2128; border: 1px solid #30363d; border-radius: 8px; font-size: 13px; pointer-events: none; display: none; z-index: 20; max-width: 300px; line-height: 1.6; }
+.tooltip b { color: #58a6ff; }
+.tooltip .count { color: #7ee787; }
+.node-label { font-size: 11px; fill: #c9d1d9; text-anchor: middle; pointer-events: none; font-weight: 500; }
+.link { stroke-opacity: 0.3; }
+.link:hover { stroke-opacity: 0.8; }
+.node circle { cursor: pointer; stroke-width: 2; }
+.node circle:hover { stroke-width: 3; filter: brightness(1.3); }
+.legend { position: fixed; top: 12px; right: 12px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 12px; }
+.legend div { margin: 4px 0; display: flex; align-items: center; gap: 6px; }
+.legend span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+</style>
+</head>
+<body>
+<div id="container">
+  <div class="controls">
+    <input type="text" id="search" placeholder="Buscar app..." autofocus>
+  </div>
+  <div class="legend">
+    <div><b>Overview — Apps do Projeto</b></div>
+    <div style="margin-top:8px;color:#484f58">Tamanho = nº componentes</div>
+    <div style="color:#484f58">Espessura = nº conexões</div>
+    <div style="margin-top:8px;color:#484f58">Scroll = zoom</div>
+    <div style="color:#484f58">Drag = mover</div>
+    <div style="color:#484f58">Clique = detalhe do app</div>
+  </div>
+  <div class="tooltip" id="tooltip"></div>
+  <div class="info" id="info"></div>
+  <svg id="svg"></svg>
+</div>
+<script>
+// D3.js v7 minified (inline)
+!function(){const t="7.9.0";function e(t,e){return null==t||null==e?NaN:t<e?-1:t>e?1:t>=e?0:NaN}function n(t,e){return null==t||null==e?NaN:e<t?-1:e>t?1:e>=t?0:NaN}/* D3.js is too large to inline — using CDN fallback */}();
+</script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+const DATA = /*__DATA__*/;
+const nodes = DATA.nodes;
+const links = DATA.links;
+
+const width = window.innerWidth;
+const height = window.innerHeight;
+
+const svg = d3.select('#svg')
+  .attr('viewBox', [0, 0, width, height]);
+
+const g = svg.append('g');
+
+// Zoom
+const zoom = d3.zoom()
+  .scaleExtent([0.1, 8])
+  .on('zoom', (event) => g.attr('transform', event.transform));
+svg.call(zoom);
+
+// Escala de tamanho dos nós
+const sizeScale = d3.scaleSqrt()
+  .domain([0, d3.max(nodes, d => d.total)])
+  .range([8, 40]);
+
+// Escala de espessura das arestas
+const linkScale = d3.scaleLog()
+  .domain([1, d3.max(links, d => d.count) || 1])
+  .range([0.5, 6]);
+
+// Cores dos nós baseado no total de componentes
+const colorScale = d3.scaleSequential(d3.interpolateViridis)
+  .domain([0, d3.max(nodes, d => d.total)]);
+
+// Simulação
+const simulation = d3.forceSimulation(nodes)
+  .force('link', d3.forceLink(links).id(d => d.id).distance(120))
+  .force('charge', d3.forceManyBody().strength(-300))
+  .force('center', d3.forceCenter(width / 2, height / 2))
+  .force('collision', d3.forceCollide().radius(d => sizeScale(d.total) + 5));
+
+// Arestas
+const link = g.append('g')
+  .selectAll('line')
+  .data(links)
+  .join('line')
+  .attr('class', 'link')
+  .attr('stroke', '#30363d')
+  .attr('stroke-width', d => linkScale(d.count));
+
+// Nós
+const node = g.append('g')
+  .selectAll('g')
+  .data(nodes)
+  .join('g')
+  .attr('class', 'node')
+  .call(d3.drag()
+    .on('start', dragstarted)
+    .on('drag', dragged)
+    .on('end', dragended));
+
+node.append('circle')
+  .attr('r', d => sizeScale(d.total))
+  .attr('fill', d => colorScale(d.total))
+  .attr('stroke', '#30363d');
+
+node.append('text')
+  .attr('class', 'node-label')
+  .attr('dy', d => sizeScale(d.total) + 14)
+  .text(d => d.id);
+
+// Tooltip
+const tooltip = d3.select('#tooltip');
+
+node.on('mouseover', (event, d) => {
+  tooltip.style('display', 'block')
+    .html(`<b>${d.id}</b><br>
+      Views: <span class="count">${d.views}</span><br>
+      Models: <span class="count">${d.models}</span><br>
+      Forms: <span class="count">${d.forms}</span><br>
+      URLs: <span class="count">${d.urls}</span><br>
+      Templates: <span class="count">${d.templates}</span>`);
+  // Highlight connected
+  link.attr('stroke-opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 0.8 : 0.05);
+})
+.on('mousemove', (event) => {
+  tooltip.style('left', (event.clientX + 15) + 'px')
+    .style('top', (event.clientY - 10) + 'px');
+})
+.on('mouseout', () => {
+  tooltip.style('display', 'none');
+  link.attr('stroke-opacity', 0.3);
+})
+.on('click', (event, d) => {
+  // Abrir detalhe do app (se existir)
+  const detailFile = d.id + '.html';
+  window.open(detailFile, '_blank');
+});
+
+// Hover em arestas
+link.on('mouseover', (event, d) => {
+  const types = Object.entries(d.types).map(([k,v]) => `${k}: ${v}`).join('<br>');
+  tooltip.style('display', 'block')
+    .html(`<b>${d.source.id} → ${d.target.id}</b><br>Total: <span class="count">${d.count}</span><br>${types}`);
+})
+.on('mousemove', (event) => {
+  tooltip.style('left', (event.clientX + 15) + 'px')
+    .style('top', (event.clientY - 10) + 'px');
+})
+.on('mouseout', () => tooltip.style('display', 'none'));
+
+// Simulação tick
+simulation.on('tick', () => {
+  link
+    .attr('x1', d => d.source.x)
+    .attr('y1', d => d.source.y)
+    .attr('x2', d => d.target.x)
+    .attr('y2', d => d.target.y);
+  node.attr('transform', d => `translate(${d.x},${d.y})`);
+});
+
+// Busca
+d3.select('#search').on('input', function() {
+  const term = this.value.toLowerCase();
+  node.style('opacity', d => !term || d.id.toLowerCase().includes(term) ? 1 : 0.1);
+  link.style('opacity', d => {
+    if (!term) return 1;
+    return (d.source.id.toLowerCase().includes(term) || d.target.id.toLowerCase().includes(term)) ? 1 : 0.05;
+  });
+});
+
+// Info
+d3.select('#info').text(`${nodes.length} apps, ${links.length} conexões inter-app`);
+
+// Drag
+function dragstarted(event, d) { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
+function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+function dragended(event, d) { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }
+</script>
+</body>
+</html>

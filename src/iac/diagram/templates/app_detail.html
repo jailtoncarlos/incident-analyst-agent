@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>IAC — App Detail</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; overflow: hidden; }
+#container { width: 100vw; height: 100vh; position: relative; }
+svg { width: 100%; height: 100%; }
+.controls { position: fixed; top: 12px; left: 12px; z-index: 10; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.controls input { padding: 6px 12px; border-radius: 6px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; font-size: 14px; width: 220px; }
+.controls input::placeholder { color: #484f58; }
+.controls button { padding: 5px 10px; border-radius: 6px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; font-size: 12px; cursor: pointer; }
+.controls button:hover { background: #21262d; }
+.controls button.active { background: #1f6feb; border-color: #1f6feb; }
+.info { position: fixed; bottom: 12px; left: 12px; z-index: 10; font-size: 12px; color: #484f58; }
+.tooltip { position: fixed; padding: 10px 14px; background: #1c2128; border: 1px solid #30363d; border-radius: 8px; font-size: 12px; pointer-events: none; display: none; z-index: 20; max-width: 350px; line-height: 1.5; }
+.tooltip b { color: #58a6ff; }
+.tooltip .file { color: #7ee787; font-family: monospace; font-size: 11px; }
+.tooltip .meta { color: #484f58; }
+.node-label { font-size: 10px; fill: #c9d1d9; text-anchor: middle; pointer-events: none; }
+.link { stroke-opacity: 0.2; }
+.legend { position: fixed; top: 12px; right: 12px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 12px; }
+.legend div { margin: 3px 0; display: flex; align-items: center; gap: 6px; }
+.legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.back-link { position: fixed; top: 12px; left: 12px; z-index: 10; }
+.back-link a { color: #58a6ff; text-decoration: none; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="container">
+  <div class="back-link"><a href="overview.html">← Overview</a></div>
+  <div class="controls" style="top:36px">
+    <input type="text" id="search" placeholder="Buscar componente...">
+    <button class="filter active" data-type="all">Todos</button>
+    <button class="filter" data-type="view">Views</button>
+    <button class="filter" data-type="model">Models</button>
+    <button class="filter" data-type="form">Forms</button>
+    <button class="filter" data-type="template">Templates</button>
+    <button class="filter" data-type="url">URLs</button>
+  </div>
+  <div class="legend">
+    <div><b id="app-title"></b></div>
+    <div style="margin-top:6px"><span class="dot" style="background:#58a6ff"></span> View</div>
+    <div><span class="dot" style="background:#7ee787"></span> Model</div>
+    <div><span class="dot" style="background:#f0883e"></span> Form</div>
+    <div><span class="dot" style="background:#bc8cff"></span> Template</div>
+    <div><span class="dot" style="background:#484f58"></span> URL</div>
+  </div>
+  <div class="tooltip" id="tooltip"></div>
+  <div class="info" id="info"></div>
+  <svg id="svg"></svg>
+</div>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+const DATA = /*__DATA__*/;
+const nodes = DATA.nodes;
+const links = DATA.links;
+const appName = DATA.app_name;
+
+document.getElementById('app-title').textContent = appName;
+document.title = `IAC — ${appName}`;
+
+const typeColors = {
+  view: '#58a6ff',
+  model: '#7ee787',
+  form: '#f0883e',
+  template: '#bc8cff',
+  url: '#484f58',
+};
+
+const typeRadius = {
+  view: 8,
+  model: 7,
+  form: 6,
+  template: 5,
+  url: 4,
+};
+
+const edgeColors = {
+  url_resolves: '#484f58',
+  model_usage: '#7ee787',
+  method_call: '#3fb950',
+  form_usage: '#f0883e',
+  form_model: '#d29922',
+  renders: '#bc8cff',
+  field_definition: '#388bfd',
+};
+
+const width = window.innerWidth;
+const height = window.innerHeight;
+
+const svg = d3.select('#svg').attr('viewBox', [0, 0, width, height]);
+const g = svg.append('g');
+
+const zoom = d3.zoom()
+  .scaleExtent([0.1, 10])
+  .on('zoom', (event) => g.attr('transform', event.transform));
+svg.call(zoom);
+
+const simulation = d3.forceSimulation(nodes)
+  .force('link', d3.forceLink(links).id(d => d.id).distance(60))
+  .force('charge', d3.forceManyBody().strength(-150))
+  .force('center', d3.forceCenter(width / 2, height / 2))
+  .force('collision', d3.forceCollide().radius(12));
+
+// Arrowheads
+svg.append('defs').selectAll('marker')
+  .data(Object.keys(edgeColors))
+  .join('marker')
+  .attr('id', d => `arrow-${d}`)
+  .attr('viewBox', '0 -5 10 10')
+  .attr('refX', 20)
+  .attr('refY', 0)
+  .attr('markerWidth', 6)
+  .attr('markerHeight', 6)
+  .attr('orient', 'auto')
+  .append('path')
+  .attr('d', 'M0,-5L10,0L0,5')
+  .attr('fill', d => edgeColors[d]);
+
+const link = g.append('g')
+  .selectAll('line')
+  .data(links)
+  .join('line')
+  .attr('class', 'link')
+  .attr('stroke', d => edgeColors[d.type] || '#30363d')
+  .attr('stroke-width', 1)
+  .attr('marker-end', d => `url(#arrow-${d.type})`);
+
+const node = g.append('g')
+  .selectAll('g')
+  .data(nodes)
+  .join('g')
+  .attr('class', 'node')
+  .call(d3.drag()
+    .on('start', dragstarted)
+    .on('drag', dragged)
+    .on('end', dragended));
+
+node.append('circle')
+  .attr('r', d => typeRadius[d.type] || 6)
+  .attr('fill', d => typeColors[d.type] || '#484f58')
+  .attr('stroke', '#0d1117')
+  .attr('stroke-width', 1.5)
+  .style('cursor', 'pointer');
+
+node.append('text')
+  .attr('class', 'node-label')
+  .attr('dy', d => (typeRadius[d.type] || 6) + 12)
+  .text(d => d.label);
+
+// Tooltip
+const tooltip = d3.select('#tooltip');
+
+node.on('mouseover', (event, d) => {
+  let html = `<b>${d.label}</b> <span class="meta">(${d.type})</span><br>`;
+  if (d.file) html += `<span class="file">${d.file}${d.line ? ':' + d.line : ''}</span><br>`;
+  if (d.fields && d.fields.length) html += `Fields: ${d.fields.slice(0,8).join(', ')}${d.fields.length > 8 ? '...' : ''}<br>`;
+  if (d.methods && d.methods.length) html += `Methods: ${d.methods.slice(0,8).join(', ')}${d.methods.length > 8 ? '...' : ''}<br>`;
+
+  tooltip.style('display', 'block').html(html);
+
+  // Highlight connected
+  const connected = new Set();
+  link.each(l => {
+    if (l.source.id === d.id || l.target.id === d.id) {
+      connected.add(l.source.id);
+      connected.add(l.target.id);
+    }
+  });
+  node.style('opacity', n => connected.has(n.id) || n.id === d.id ? 1 : 0.1);
+  link.attr('stroke-opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 0.8 : 0.02);
+})
+.on('mousemove', (event) => {
+  tooltip.style('left', (event.clientX + 15) + 'px')
+    .style('top', (event.clientY - 10) + 'px');
+})
+.on('mouseout', () => {
+  tooltip.style('display', 'none');
+  node.style('opacity', 1);
+  link.attr('stroke-opacity', 0.2);
+});
+
+// Clique para fixar highlight
+let selectedNode = null;
+node.on('click', (event, d) => {
+  if (selectedNode === d.id) {
+    selectedNode = null;
+    node.style('opacity', 1);
+    link.attr('stroke-opacity', 0.2);
+    return;
+  }
+  selectedNode = d.id;
+  const connected = new Set([d.id]);
+  link.each(l => {
+    if (l.source.id === d.id || l.target.id === d.id) {
+      connected.add(l.source.id);
+      connected.add(l.target.id);
+    }
+  });
+  node.style('opacity', n => connected.has(n.id) ? 1 : 0.1);
+  link.attr('stroke-opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 0.8 : 0.02);
+});
+
+// Filtro por tipo
+let activeFilter = 'all';
+d3.selectAll('.filter').on('click', function() {
+  d3.selectAll('.filter').classed('active', false);
+  d3.select(this).classed('active', true);
+  activeFilter = this.dataset.type;
+  applyFilters();
+});
+
+// Busca
+d3.select('#search').on('input', function() { applyFilters(); });
+
+function applyFilters() {
+  const term = document.getElementById('search').value.toLowerCase();
+  node.style('opacity', d => {
+    const matchType = activeFilter === 'all' || d.type === activeFilter;
+    const matchSearch = !term || d.label.toLowerCase().includes(term) || d.id.toLowerCase().includes(term);
+    return matchType && matchSearch ? 1 : 0.05;
+  });
+  link.style('opacity', d => {
+    const src = nodes.find(n => n.id === (d.source.id || d.source));
+    const tgt = nodes.find(n => n.id === (d.target.id || d.target));
+    if (!src || !tgt) return 0.05;
+    const srcVisible = (activeFilter === 'all' || src.type === activeFilter) && (!term || src.label.toLowerCase().includes(term));
+    const tgtVisible = (activeFilter === 'all' || tgt.type === activeFilter) && (!term || tgt.label.toLowerCase().includes(term));
+    return srcVisible || tgtVisible ? 0.3 : 0.02;
+  });
+}
+
+simulation.on('tick', () => {
+  link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+    .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+  node.attr('transform', d => `translate(${d.x},${d.y})`);
+});
+
+d3.select('#info').text(`${appName}: ${nodes.length} componentes, ${links.length} arestas`);
+
+function dragstarted(event, d) { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
+function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+function dragended(event, d) { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }
+</script>
+</body>
+</html>

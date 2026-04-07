@@ -92,5 +92,59 @@ def analyze(issue_url: str, description: str, base_dir: str, dry_run: bool, simu
     click.echo('Análise ainda não implementada. Veja issue #1.')
 
 
+@main.command()
+@click.option('--base-dir', type=click.Path(exists=True), default='.', help='Diretório raiz do projeto.')
+@click.option('--overview', is_flag=True, help='Gerar overview (apps como nós).')
+@click.option('--app', type=str, default=None, help='Gerar detalhe de um app específico.')
+@click.option('--all-apps', 'all_apps', is_flag=True, help='Gerar diagramas de todos os apps.')
+@click.option('--open', 'open_browser', is_flag=True, help='Abrir no browser após gerar.')
+def diagram(base_dir: str, overview: bool, app: str, all_apps: bool, open_browser: bool):
+    """Gera diagramas interativos do grafo e estrutura."""
+    base = Path(base_dir).resolve()
+    iac_dir = base / IAC_DIR
+
+    if not iac_dir.exists():
+        click.echo('Nenhuma inspeção encontrada. Execute `iac init` primeiro.')
+        sys.exit(1)
+
+    from iac.config.settings import load_structure
+    from iac.diagram.generator import generate_app_detail_data, generate_overview_data, write_html
+
+    diagrams_dir = iac_dir / 'diagrams'
+    generated = []
+
+    if overview or (not app and not all_apps):
+        data = generate_overview_data(iac_dir)
+        output = diagrams_dir / 'overview.html'
+        write_html(output, 'overview.html', data)
+        generated.append(output)
+        click.echo(f'Overview: {output}')
+
+    if app:
+        data = generate_app_detail_data(iac_dir, app)
+        if data['nodes']:
+            output = diagrams_dir / f'{app}.html'
+            write_html(output, 'app_detail.html', data)
+            generated.append(output)
+            click.echo(f'App {app}: {output}')
+        else:
+            click.echo(f'App "{app}" não encontrado ou vazio.')
+
+    if all_apps:
+        structure = load_structure(iac_dir)
+        for app_name in structure.get('apps', {}):
+            data = generate_app_detail_data(iac_dir, app_name)
+            if data['nodes']:
+                output = diagrams_dir / f'{app_name}.html'
+                write_html(output, 'app_detail.html', data)
+                generated.append(output)
+        click.echo(f'Gerados {len(generated)} diagramas em {diagrams_dir}')
+
+    if open_browser and generated:
+        import webbrowser
+
+        webbrowser.open(f'file://{generated[0]}')
+
+
 if __name__ == '__main__':
     main()
