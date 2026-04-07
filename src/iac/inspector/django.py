@@ -59,10 +59,19 @@ def build_django_structure(base_dir: Path, config: dict) -> dict:
         if any(app_data[k] for k in app_data):
             structure[app_name] = app_data
 
-    # Nível 3: buscar referências inversas em templates ({% url 'view_name' %})
-    _enrich_renders_from_templates(base_dir, apps, structure)
+    # Wrapper para os enrich functions que esperam {'apps': {...}}
+    wrapped = {'apps': structure}
 
-    return {'apps': structure}
+    # Nível 3: buscar referências inversas em templates ({% url 'view_name' %})
+    _enrich_renders_from_templates(base_dir, apps, wrapped)
+
+    # Nível 4: propagar renders via {% include %} e {% extends %}
+    _enrich_renders_from_includes(base_dir, apps, wrapped)
+
+    # Nível 5: buscar referências .html em .py via regex (f-strings, concatenações)
+    _enrich_renders_from_py_regex(base_dir, apps, wrapped)
+
+    return wrapped
 
 
 def _discover_apps(base_dir: Path, config: dict) -> dict[str, Path]:
@@ -470,3 +479,160 @@ def _enrich_renders_from_templates(base_dir: Path, apps: dict[str, Path], struct
                             renders.append(template_name)
                             views[ref_view]['renders'] = renders
                             logger.debug(f'Template inverso: {template_name} → {app_name}.{ref_view}')
+
+
+# ---------------------------------------------------------------------------
+# Nível 4: Propagar renders via {% include %} e {% extends %}
+# ---------------------------------------------------------------------------
+
+
+def _enrich_renders_from_includes(base_dir: Path, apps: dict[str, Path], structure: dict) -> None:
+    """Se uma view renderiza template A e A faz include de B, associa B à view também.
+
+    Isso captura templates parciais (abas, includes, partials) que são
+    usados indiretamente por views via include/extends.
+    """
+    include_pattern = re.compile(r'{%\s*(?:include|extends)\s+["\']([^"\']+)["\']')
+
+    # Construir mapa: template → lista de templates que ele inclui
+    template_includes: dict[str, list[str]] = {}
+
+    for _app_name, app_dir in apps.items():
+        templates_dir = app_dir / 'templates'
+        if not templates_dir.exists():
+            continue
+
+        for html_file in templates_dir.rglob('*.html'):
+            try:
+                content = html_file.read_text(encoding='utf-8', errors='replace')
+            except OSError:
+                continue
+
+            template_name = str(html_file.relative_to(templates_dir))
+            includes = []
+            for match in include_pattern.finditer(content):
+                includes.append(match.group(1))
+            if includes:
+                template_includes[template_name] = includes
+
+    # Construir set global de todos os templates (para matching flexível)
+    all_templates_set: set[str] = set()
+    for app_data in structure.get('apps', {}).values():
+        all_templates_set.update(app_data.get('templates', []))
+
+    # Para cada view que já tem renders, propagar para os includes
+    for _app_name, app_data in structure.get('apps', {}).items():
+        views = app_data.get('views', {})
+        existing_templates = set(app_data.get('templates', []))
+
+        for _view_name, view_data in views.items():
+            current_renders = list(view_data.get('renders', []))
+            if not current_renders:
+                continue
+
+            # BFS: propagar includes dos renders existentes
+            to_visit = list(current_renders)
+            visited = set(current_renders)
+            while to_visit:
+                template = to_visit.pop(0)
+                for included in template_includes.get(template, []):
+                    if included in visited:
+                        continue
+                    # Matching flexível: o include pode ser path completo ou relativo
+                    resolved = _resolve_template_ref(included, existing_templates, all_templates_set)
+                    if resolved:
+                        current_renders.append(resolved)
+                        visited.add(included)
+                        visited.add(resolved)
+                        to_visit.append(resolved)
+
+            new_count = len(current_renders) - len(view_data.get('renders', []))
+            if new_count > 0:
+                view_data['renders'] = current_renders
+                logger.debug(f'Include propagation: +{new_count} templates for view')
+
+
+def _resolve_template_ref(ref: str, app_templates: set[str], all_templates: set[str]) -> str | None:
+    """Resolve uma referência de template para um template existente.
+
+    Trata variações de path:
+      'abas/anexos.html'                          → direto
+      'erros/templates/abas/anexos.html'           → strip 'app/templates/'
+      'documento_eletronico/cabecalho_include.html' → busca em todos os apps
+      'relatorio_pdf.html'                         → busca global
+    """
+    # Match direto no app
+    if ref in app_templates:
+        return ref
+
+    # Strip 'app/templates/' prefix
+    if '/templates/' in ref:
+        stripped = ref.split('/templates/', 1)[1]
+        if stripped in app_templates:
+            return stripped
+
+    # Match no basename
+    basename = ref.rsplit('/', 1)[-1]
+    for t in app_templates:
+        if t == basename or t.endswith('/' + basename):
+            return t
+
+    # Match global (outros apps)
+    if ref in all_templates:
+        return ref
+    for t in all_templates:
+        if t == basename or t.endswith('/' + basename):
+            return t
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Nível 5: Buscar referências .html em .py via regex
+# ---------------------------------------------------------------------------
+
+
+def _enrich_renders_from_py_regex(base_dir: Path, apps: dict[str, Path], structure: dict) -> None:
+    """Busca strings .html em arquivos .py que o AST não capturou.
+
+    Captura: f-strings, concatenações, variáveis, chamadas dinâmicas.
+    Ex: f'{app}/chamado.html', template = 'chamado.html', etc.
+    """
+    html_pattern = re.compile(r'["\'](\w[\w/]*\.html)["\']')
+
+    for app_name, app_dir in apps.items():
+        app_data = structure.get('apps', {}).get(app_name, {})
+        views = app_data.get('views', {})
+        existing_templates = set(app_data.get('templates', []))
+        if not existing_templates:
+            continue
+
+        # Coletar todas as referências .html dos .py do app
+        py_templates: dict[str, set[str]] = {}  # arquivo → set de templates referenciados
+        for py_file in sorted(app_dir.rglob('*.py')):
+            if 'migration' in str(py_file) or '__pycache__' in str(py_file):
+                continue
+            try:
+                content = py_file.read_text(encoding='utf-8', errors='replace')
+            except OSError:
+                continue
+            for match in html_pattern.finditer(content):
+                template_ref = match.group(1)
+                # Matching flexível: path completo, com /templates/, ou basename
+                resolved = _resolve_template_ref(template_ref, existing_templates, existing_templates)
+                if resolved:
+                    relative = str(py_file.relative_to(app_dir.parent))
+                    if relative not in py_templates:
+                        py_templates[relative] = set()
+                    py_templates[relative].add(resolved)
+
+        # Associar templates encontrados às views do mesmo arquivo
+        for _view_name, view_data in views.items():
+            view_file = view_data.get('file', '')
+            if view_file in py_templates:
+                renders = view_data.get('renders', [])
+                for t in py_templates[view_file]:
+                    if t not in renders:
+                        renders.append(t)
+                if renders:
+                    view_data['renders'] = renders
