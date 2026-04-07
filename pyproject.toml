@@ -1,0 +1,59 @@
+[project]
+name = "incident-analyst-agent"
+version = "0.1.0"
+description = "Agente de análise técnica de incidentes de software, capaz de investigar código, reconstruir fluxos, simular cenários e propor resolução com resposta operacional estruturada."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Jailton Carlos de Paiva", email = "jailtoncarlos@gmail.com"},
+]
+keywords = ["incident", "triage", "agent", "django", "llm", "code-analysis"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Bug Tracking",
+]
+dependencies = [
+    "click>=8.0",
+    "requests>=2.28",
+    "python-gitlab>=4.0",
+]
+
+[project.optional-dependencies]
+github = ["PyGithub>=2.0"]
+gemini = ["google-generativeai>=0.5"]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+iac = "iac.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/iac"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "S", "B", "SIM", "PIE"]
+ignore = ["S107", "S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

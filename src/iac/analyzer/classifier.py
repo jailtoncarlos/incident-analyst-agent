@@ -1,0 +1,1 @@
+"""Classificação do incidente (tipo::*)."""
