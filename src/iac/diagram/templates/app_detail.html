@@ -47,6 +47,8 @@ svg { width: 100%; height: 100%; }
     <div><span class="dot" style="background:#f0883e"></span> Form</div>
     <div><span class="dot" style="background:#bc8cff"></span> Template</div>
     <div><span class="dot" style="background:#484f58"></span> URL</div>
+    <div style="margin-top:8px;color:#484f58;font-size:11px">Drag = fixa posição</div>
+    <div style="color:#484f58;font-size:11px">Duplo-clique = libera</div>
   </div>
   <div class="tooltip" id="tooltip"></div>
   <div class="info" id="info"></div>
@@ -243,7 +245,10 @@ d3.select('#info').text(`${appName}: ${nodes.length} componentes, ${links.length
 
 function dragstarted(event, d) { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
 function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
-function dragended(event, d) { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }
+function dragended(event, d) { if (!event.active) simulation.alphaTarget(0); /* fx/fy mantidos: nó fica fixo onde foi solto */ }
+
+// Duplo-clique libera o nó fixado
+node.on('dblclick', (event, d) => { d.fx = null; d.fy = null; simulation.alphaTarget(0.1).restart(); });
 </script>
 </body>
 </html>
