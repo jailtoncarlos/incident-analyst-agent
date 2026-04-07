@@ -224,21 +224,50 @@ def _call_name(node: ast.Call) -> str | None:
 
 
 def _extract_renders(node: ast.AST) -> list[str]:
-    """Extrai nomes de templates passados a render/render_to_string."""
+    """Extrai nomes de templates passados a render, render_to_string, etc."""
     templates: list[str] = []
+    render_funcs = ('render', 'render_to_string', 'TemplateResponse', 'get_template', 'select_template')
+
     for child in ast.walk(node):
-        if isinstance(child, ast.Call):
-            name = _call_name(child)
-            if name and name in ('render', 'render_to_string', 'TemplateResponse'):
-                for arg in child.args:
-                    if (
-                        isinstance(arg, ast.Constant)
-                        and isinstance(arg.value, str)
-                        and '.' in arg.value
-                        and arg.value not in templates
-                    ):
-                        templates.append(arg.value)
+        if not isinstance(child, ast.Call):
+            continue
+        name = _call_name(child)
+        if not name:
+            continue
+
+        # Funções de render: render(request, 'template.html', ...)
+        if name in render_funcs:
+            for arg in child.args:
+                _collect_template_string(arg, templates)
+            for kw in child.keywords:
+                if kw.arg in ('template_name', 'template'):
+                    _collect_template_string(kw.value, templates)
+
+        # Variáveis de template: template_name = 'template.html' ou self.template_name = '...'
+        if isinstance(child, ast.Call) and name == 'render':
+            continue  # já tratado acima
+
+    # Também buscar atribuições do tipo template = '...' ou template_name = '...'
+    for child in ast.walk(node):
+        if isinstance(child, ast.Assign):
+            for target in child.targets:
+                target_name = None
+                if isinstance(target, ast.Name):
+                    target_name = target.id
+                elif isinstance(target, ast.Attribute):
+                    target_name = target.attr
+                if target_name and 'template' in target_name.lower():
+                    _collect_template_string(child.value, templates)
+
     return templates
+
+
+def _collect_template_string(node: ast.AST, templates: list[str]) -> None:
+    """Coleta string de template de um nó AST."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        value = node.value.strip()
+        if ('/' in value or value.endswith('.html')) and value not in templates:
+            templates.append(value)
 
 
 def _extract_model_fields(node: ast.ClassDef) -> list[str]:

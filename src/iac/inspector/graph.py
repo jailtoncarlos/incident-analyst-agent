@@ -24,7 +24,9 @@ def build_graph(structure: dict) -> dict:
 
         # URL → View
         for url_entry in urls:
-            view_name = url_entry.get('view', '')
+            view_ref = url_entry.get('view', '')
+            # Normalizar: 'views.visualizar_chamado' → 'visualizar_chamado'
+            view_name = view_ref.split('.')[-1] if '.' in view_ref else view_ref
             if view_name in views:
                 edges.append(
                     {
