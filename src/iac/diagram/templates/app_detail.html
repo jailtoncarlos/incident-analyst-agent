@@ -155,13 +155,13 @@ node.append('text')
 
 // --- Estado global de interação ---
 const tooltip = d3.select('#tooltip');
-let activeFilter = 'all';
+let activeFilters = new Set(['all']); // Múltiplos filtros ativos
 let selectedNode = null;
 let searchTerm = '';
 
 // Funções auxiliares
 function isNodeVisible(d) {
-  const matchType = activeFilter === 'all' || d.type === activeFilter;
+  const matchType = activeFilters.has('all') || activeFilters.has(d.type);
   const matchSearch = !searchTerm || d.label.toLowerCase().includes(searchTerm) || d.id.toLowerCase().includes(searchTerm);
   return matchType && matchSearch;
 }
@@ -259,13 +259,39 @@ node.on('click', (event, d) => {
   render();
 });
 
-// --- Filtro por tipo ---
+// --- Filtro por tipo (seleção múltipla) ---
 d3.selectAll('.filter').on('click', function() {
-  d3.selectAll('.filter').classed('active', false);
-  d3.select(this).classed('active', true);
-  activeFilter = this.dataset.type;
-  selectedNode = null; // Limpa seleção ao mudar filtro
+  const type = this.dataset.type;
+
+  if (type === 'all') {
+    // "Todos" limpa os outros e ativa tudo
+    activeFilters = new Set(['all']);
+    d3.selectAll('.filter').classed('active', false);
+    d3.select(this).classed('active', true);
+  } else {
+    // Remover "Todos" se estava ativo
+    activeFilters.delete('all');
+    d3.select('.filter[data-type="all"]').classed('active', false);
+
+    // Toggle do tipo clicado
+    if (activeFilters.has(type)) {
+      activeFilters.delete(type);
+      d3.select(this).classed('active', false);
+    } else {
+      activeFilters.add(type);
+      d3.select(this).classed('active', true);
+    }
+
+    // Se nenhum filtro ativo, volta para "Todos"
+    if (activeFilters.size === 0) {
+      activeFilters = new Set(['all']);
+      d3.select('.filter[data-type="all"]').classed('active', true);
+    }
+  }
+
+  selectedNode = null;
   render();
+  updateInfo();
 });
 
 // --- Busca ---
