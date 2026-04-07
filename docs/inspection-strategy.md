@@ -8,7 +8,7 @@ Este documento descreve como o `iac init` inspeciona um repositório de código 
 flowchart LR
     subgraph "iac init"
         A[Repositório] --> B[Etapa 1\nDetecção do framework]
-        B --> C[Etapa 2\nMapa estrutural]
+        B --> C[Etapa 2\nMapa estrutural\n+ enriquecimento]
         C --> D[Etapa 3\nGrafo de dependências]
     end
 
@@ -25,11 +25,13 @@ flowchart LR
 
 A inspeção gera três artefatos em `.iac/`, cada um com responsabilidade distinta:
 
-| Artefato | Pergunta que responde | Tamanho típico |
-|----------|----------------------|----------------|
-| `project.json` | *Que tipo de projeto é?* | ~200 bytes |
-| `structure.json` | *O que existe?* (inventário) | ~2-5 MB |
-| `graph.json` | *Como se conecta?* (relações) | ~3-8 MB |
+| Artefato | Pergunta que responde | Conteúdo | Tamanho típico |
+|----------|----------------------|----------|----------------|
+| `project.json` | *Que tipo de projeto é?* | Framework, versão Python, settings | ~200 bytes |
+| `structure.json` | *O que existe?* (inventário) | Apps, views, models, forms, URLs, templates e seus atributos | ~2-5 MB |
+| `graph.json` | *Como se conecta?* (relações) | Arestas tipadas entre componentes (URL→view, view→model, etc.) | ~5-15 MB |
+
+Quando o agente recebe um incidente, ele usa `graph.json` para descobrir **o caminho** (URL → view → model → método) e `structure.json` para **localizar e ler** cada componente no caminho.
 
 ---
 
@@ -60,7 +62,7 @@ flowchart TD
   "settings_module": "suap.settings",
   "python_version": ">=3.14.3",
   "base_dir": "/opt/suap",
-  "inspected_at": "2026-04-07T16:01:49Z"
+  "inspected_at": "2026-04-07T16:27:32Z"
 }
 ```
 
@@ -68,7 +70,11 @@ flowchart TD
 
 ## Etapa 2 — Mapa estrutural (structure.json)
 
-O mapa estrutural é o **inventário** de todos os componentes do projeto. Para Django, a construção segue este fluxo:
+O mapa estrutural é o **inventário** de todos os componentes do projeto. A construção acontece em duas fases: parse inicial (AST) e enriquecimento (5 níveis de resolução de renders).
+
+### Fase 2a — Parse inicial
+
+Para Django, o parse via AST segue este fluxo:
 
 ```mermaid
 flowchart TD
@@ -109,49 +115,73 @@ flowchart TD
 | **URLs** | Regex em `urls.py` | padrão de URL, view associada |
 | **Templates** | `glob('templates/**/*.html')` | lista de arquivos .html |
 
-### Resolução de renders (view → template)
+### Fase 2b — Enriquecimento: resolução de renders (view → template)
 
-A resolução de qual template uma view usa é feita em 3 níveis complementares:
+A resolução de qual template uma view usa é o aspecto mais complexo da inspeção. Um template pode ser referenciado de muitas formas diferentes no código Django. Para maximizar a cobertura, a resolução acontece em **5 níveis complementares**, cada um capturando um padrão diferente:
 
 ```mermaid
 flowchart TD
-    A[View] --> B{Nível 1:\nString literal no código?}
-    B -->|"render(request, 'chamado.html')"| C["✅ Mapeado"]
-    B -->|Não| D{Nível 1b:\ntemplate_name em classe?}
-    D -->|"template_name = 'chamado.html'"| C
-    D -->|Não| E{Nível 2:\nConvenção Django?}
-    E -->|"view 'visualizar_chamado'\n→ 'visualizar_chamado.html' existe?"| C
-    E -->|Não| F{Nível 3:\nReferência inversa?}
-    F -->|"template tem\n{% url 'visualizar_chamado' %}"| C
-    F -->|Não| G["❌ Sem mapeamento\n(agente usa grep em runtime)"]
+    A[View] --> N1{Nível 1\nString literal\nno código?}
+    N1 -->|"render(request, 'x.html')\ntemplate_name = 'x.html'"| OK["✅ Mapeado"]
+    N1 -->|Não| N2{Nível 2\nConvenção\nDjango?}
+    N2 -->|"view 'visualizar_chamado'\n→ 'visualizar_chamado.html' existe"| OK
+    N2 -->|Não| N3{Nível 3\nReferência inversa\nvia URL tag?}
+    N3 -->|"template tem\n{% url 'view_name' %}"| OK
+    N3 -->|Não| N4{Nível 4\nPropagação\nvia include/extends?}
+    N4 -->|"view renderiza A.html\nA.html faz include de B.html\n→ B.html associado"| OK
+    N4 -->|Não| N5{Nível 5\nRegex em .py?}
+    N5 -->|"string 'x.html'\nencontrada no mesmo\narquivo da view"| OK
+    N5 -->|Não| MISS["❌ Sem mapeamento\n(agente usa grep\nem runtime)"]
 ```
 
 **Nível 1 — Extração direta (AST):**
-Busca strings literais em chamadas `render()`, `render_to_string()`, `TemplateResponse()`, `get_template()` e atribuições `template_name = '...'` (class-based views).
+Busca strings literais de template em:
+- Chamadas: `render()`, `render_to_string()`, `TemplateResponse()`, `get_template()`
+- Keywords: `template_name='...'`, `template='...'`
+- Atributos de classe: `template_name = '...'` em class-based views
 
 **Nível 2 — Convenção Django (heurística):**
-Cruza nome da view com templates existentes:
+Cruza nome da view com templates existentes no app:
 - `visualizar_chamado` → `visualizar_chamado.html`
 - `visualizar_chamado` → `centralservicos/visualizar_chamado.html`
-- `visualizar_chamado` → `chamado.html` (sem prefixo `visualizar_`)
+- `visualizar_chamado` → `chamado.html` (remove prefixos `listar_`, `visualizar_`, `editar_`, etc.)
 
-**Nível 3 — Referência inversa (templates):**
-Percorre os templates buscando `{% url 'view_name' %}` e mapeia na direção inversa: o template referencia a view, logo a view provavelmente renderiza (ou está relacionada a) esse template.
+**Nível 3 — Referência inversa via `{% url %}` (templates):**
+Percorre os templates buscando `{% url 'view_name' %}`. Se um template referencia uma view, essa view provavelmente está relacionada ao template.
 
-**Cobertura observada (SUAP, 2121 templates):**
+**Nível 4 — Propagação via `{% include %}` e `{% extends %}` (BFS):**
+Se uma view já renderiza `erro.html` e `erro.html` faz `{% include "abas/anexos.html" %}`, o template `abas/anexos.html` é associado à view. A propagação é feita via BFS (busca em largura), seguindo a cadeia de includes recursivamente.
 
-| Nível | renders detectados | Cobertura |
-|-------|-------------------|-----------|
-| Apenas Nível 1 | 44 | 2% |
-| + Nível 1b (class attrs) | ~90 | 4% |
-| + Nível 2 (convenção) | ~600 | 28% |
-| + Nível 3 (inverso) | **1.280** | **60%** |
+A resolução de paths usa matching flexível (`_resolve_template_ref`):
+- Match direto: `abas/anexos.html`
+- Strip de prefixo: `erros/templates/abas/anexos.html` → `abas/anexos.html`
+- Match por basename: `relatorio_pdf.html` → busca global em todos os apps
+
+**Nível 5 — Regex em arquivos `.py`:**
+Busca strings terminadas em `.html` nos arquivos Python do app, capturando referências que o AST não detecta (f-strings, concatenações, variáveis, chamadas dinâmicas). Associa ao template existente mais próximo usando o mesmo matching flexível.
+
+### Cobertura observada (SUAP, 1.909 templates únicos)
+
+| Nível | Técnica | Templates cobertos | Cobertura |
+|-------|---------|-------------------|-----------|
+| 1 | Extração direta (AST) | 44 | 2% |
+| 1b | + Atributos de classe (CBV) | ~90 | 5% |
+| 2 | + Convenção Django | ~600 | 31% |
+| 3 | + Referência inversa ({% url %}) | 1.092 | 57% |
+| 4 | + Propagação include/extends (BFS) | 1.281 | 67% |
+| 5 | + Regex em .py | **1.370** | **71%** |
+
+Os 29% não cobertos são:
+- **~14%** — Templates órfãos (não referenciados em nenhum lugar — possivelmente obsoletos)
+- **~15%** — Referências muito dinâmicas (variáveis construídas em runtime, lógica condicional complexa)
+
+O máximo teórico alcançável (excluindo órfãos) é **~87%**.
 
 ---
 
 ## Etapa 3 — Grafo de dependências (graph.json)
 
-O grafo é construído percorrendo o `structure.json` e criando arestas tipadas entre componentes.
+O grafo é construído percorrendo o `structure.json` (já enriquecido) e criando arestas tipadas entre componentes.
 
 ```mermaid
 graph TD
@@ -162,12 +192,14 @@ graph TD
     FIELD["Field\ndata_limite_atendimento"]
     FORM["Form\nComunicacaoFormFactory"]
     TEMPLATE["Template\nchamado.html"]
+    INCLUDE["Template (include)\nabas/anexos.html"]
 
     URL -->|url_resolves| VIEW
     VIEW -->|model_usage| MODEL
     VIEW -->|method_call| METHOD
     VIEW -->|form_usage| FORM
     VIEW -->|renders| TEMPLATE
+    VIEW -.->|renders (via include)| INCLUDE
     MODEL -->|field_definition| FIELD
     MODEL -->|method_definition| METHOD
     FORM -->|form_model| MODEL
@@ -177,12 +209,12 @@ graph TD
 
 | Tipo | De | Para | Como é detectado |
 |------|-----|------|-----------------|
-| `url_resolves` | URL pattern | View | Parse de `urls.py` |
+| `url_resolves` | URL pattern | View | Parse de `urls.py` com normalização `views.func` → `func` |
 | `model_usage` | View | Model | Chamadas `Model.objects.*` no corpo da view |
 | `method_call` | View | Model.method | Chamadas `obj.method()` onde method existe no model |
 | `form_usage` | View | Form | Instanciação de Form no corpo da view |
 | `form_model` | Form | Model | `class Meta: model = Model` no form |
-| `renders` | View | Template | 3 níveis de resolução (ver acima) |
+| `renders` | View | Template | 5 níveis de resolução (ver acima) |
 | `field_definition` | Model | Model.field | Campos `*Field` no corpo da classe |
 
 ### Como o agente navega o grafo
@@ -211,6 +243,9 @@ sequenceDiagram
     Graph->>Structure: Onde está chamado.html?
     Structure->>Code: centralservicos/templates/chamado.html
     Note over Code: Agente lê o template
+
+    Graph->>Graph: renders (include) → abas/anexos.html
+    Note over Code: Agente lê templates incluídos
 ```
 
 O grafo permite que o agente **navegue sem grep** — ele sabe exatamente quais componentes visitar e em qual ordem.
@@ -219,19 +254,62 @@ O grafo permite que o agente **navegue sem grep** — ele sabe exatamente quais 
 
 ## Números de referência (SUAP)
 
-| Métrica | Valor | Tempo |
-|---------|-------|-------|
-| Apps mapeados | 94 | — |
-| Views | 3.573 | — |
-| Models | 1.852 | — |
-| Forms | 2.102 | — |
-| URLs | 2.223 | — |
-| Templates | 2.121 | — |
-| Arestas no grafo | 34.480 | — |
-| URL → View resolvidas | 1.816 (82%) | — |
-| View → Template resolvidas | 1.280 (60%) | — |
-| **Tempo total de inspeção** | — | **4 segundos** |
-| **Tamanho do .iac/** | 8.5 MB | — |
+| Métrica | Valor |
+|---------|-------|
+| Apps mapeados | 94 |
+| Views | 3.573 |
+| Models | 1.852 |
+| Forms | 2.102 |
+| URLs | 2.223 |
+| Templates | 2.121 |
+| **Arestas no grafo** | **56.155** |
+| URL → View resolvidas | 1.816 (82%) |
+| View → Template cobertos | 1.370 (71%) |
+| **Tempo total de inspeção** | **5 segundos** |
+| **Tamanho do .iac/** | ~15 MB |
+
+### Distribuição de arestas por tipo
+
+| Tipo | Quantidade | % |
+|------|-----------|---|
+| `renders` | 22.955 | 41% |
+| `method_call` | 14.466 | 26% |
+| `field_definition` | 11.798 | 21% |
+| `model_usage` | 2.538 | 5% |
+| `url_resolves` | 1.816 | 3% |
+| `form_usage` | 1.623 | 3% |
+| `form_model` | 959 | 2% |
+
+---
+
+## Pipeline de enriquecimento
+
+O enriquecimento do `structure.json` segue um pipeline sequencial onde cada nível complementa o anterior:
+
+```mermaid
+flowchart TD
+    subgraph "Parse inicial (AST)"
+        P1[Parse views.py] --> P2[Parse models.py]
+        P2 --> P3[Parse forms.py]
+        P3 --> P4[Parse urls.py]
+        P4 --> P5[Glob templates/]
+    end
+
+    subgraph "Enriquecimento (5 níveis)"
+        P5 --> N1["Nível 1: Extração direta\n(render, template_name)"]
+        N1 --> N2["Nível 2: Convenção Django\n(nome da view → template)"]
+        N2 --> N3["Nível 3: Referência inversa\n({% url %} nos templates)"]
+        N3 --> N4["Nível 4: Propagação\n({% include/extends %} BFS)"]
+        N4 --> N5["Nível 5: Regex em .py\n(f-strings, concatenações)"]
+    end
+
+    subgraph "Saída"
+        N5 --> S["structure.json\n(enriquecido)"]
+        S --> G["graph.json\n(gerado a partir do structure)"]
+    end
+```
+
+Cada nível opera sobre os dados já enriquecidos pelos níveis anteriores. O nível 4 (propagação via include) depende dos renders já mapeados pelos níveis 1-3 para saber quais templates percorrer.
 
 ---
 
@@ -250,3 +328,20 @@ iac/inspector/
 ```
 
 Todos os parsers produzem o mesmo formato de `structure.json` — o grafo e o agente trabalham sobre a estrutura padronizada, independente do framework.
+
+---
+
+## Monitoramento (verbose mode)
+
+Para acompanhar o enriquecimento em detalhe, use o modo verbose:
+
+```bash
+iac init --force -v
+```
+
+Os logs de debug mostram cada template detectado por nível:
+```
+DEBUG Convenção: centralservicos.visualizar_chamado → ['chamado.html']
+DEBUG Template inverso: erro.html → erros.erro
+DEBUG Include propagation: +4 templates for view
+```
