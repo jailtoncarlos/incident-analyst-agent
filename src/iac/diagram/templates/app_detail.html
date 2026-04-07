@@ -272,8 +272,74 @@ d3.selectAll('.filter').on('click', function() {
 d3.select('#search').on('input', function() {
   searchTerm = this.value.toLowerCase();
   selectedNode = null;
+
+  // Se a busca encontra exatamente um nó, seleciona e faz zoom
+  if (searchTerm) {
+    const matches = nodes.filter(n => isNodeVisible(n));
+    if (matches.length === 1) {
+      selectedNode = matches[0].id;
+      zoomToNode(matches[0]);
+    } else if (matches.length > 0 && matches.length <= 5) {
+      // Poucas correspondências: zoom para caber todas
+      zoomToFit(matches);
+    }
+  }
   render();
+  updateInfo();
 });
+
+// Enter na busca: seleciona o primeiro match e faz zoom
+d3.select('#search').on('keydown', function(event) {
+  if (event.key === 'Enter') {
+    const matches = nodes.filter(n => isNodeVisible(n));
+    if (matches.length > 0) {
+      selectedNode = matches[0].id;
+      zoomToNode(matches[0]);
+      render();
+    }
+  }
+  // Escape: limpa busca e seleção
+  if (event.key === 'Escape') {
+    this.value = '';
+    searchTerm = '';
+    selectedNode = null;
+    render();
+    updateInfo();
+  }
+});
+
+function zoomToNode(d) {
+  const scale = 2;
+  const x = -d.x * scale + width / 2;
+  const y = -d.y * scale + height / 2;
+  svg.transition().duration(500)
+    .call(zoom.transform, d3.zoomIdentity.translate(x, y).scale(scale));
+}
+
+function zoomToFit(matchedNodes) {
+  const xs = matchedNodes.map(d => d.x);
+  const ys = matchedNodes.map(d => d.y);
+  const minX = Math.min(...xs) - 50;
+  const maxX = Math.max(...xs) + 50;
+  const minY = Math.min(...ys) - 50;
+  const maxY = Math.max(...ys) + 50;
+  const dx = maxX - minX;
+  const dy = maxY - minY;
+  const scale = Math.min(width / dx, height / dy, 3) * 0.8;
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const x = width / 2 - cx * scale;
+  const y = height / 2 - cy * scale;
+  svg.transition().duration(500)
+    .call(zoom.transform, d3.zoomIdentity.translate(x, y).scale(scale));
+}
+
+function updateInfo() {
+  const visible = nodes.filter(n => isNodeVisible(n)).length;
+  const total = nodes.length;
+  const extra = searchTerm ? ` (${visible} visíveis)` : '';
+  d3.select('#info').text(`${appName}: ${total} componentes, ${links.length} arestas${extra}`);
+}
 
 simulation.on('tick', () => {
   link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
