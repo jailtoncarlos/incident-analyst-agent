@@ -43,7 +43,6 @@ DEFAULT_MAX_REFS = 6
 def analyze_issue(
     title: str,
     description: str,
-    labels: list[str] | None,
     structure: dict,
     graph: dict,
     base_dir: Path,
@@ -55,10 +54,13 @@ def analyze_issue(
 
     Encadeia: classifier → orchestrator → análise estrutural.
 
+    Entrada: apenas título e descrição da issue.
+    Saída: classificação + código navegado + análise estrutural,
+    incluindo labels_sugeridos para aplicar na issue.
+
     Args:
         title: Título da issue
         description: Corpo/descrição da issue
-        labels: Labels da issue (ex: ['sentry', 'ponto'])
         structure: Conteúdo de structure.json
         graph: Conteúdo de graph.json
         base_dir: Diretório raiz do projeto
@@ -72,8 +74,8 @@ def analyze_issue(
             context: código navegado (orchestrator)
             structural: componentes + fluxo (análise estrutural)
     """
-    # 1. Classifier — extrair metadados da descrição
-    classification = classify(title, description, labels)
+    # 1. Classifier — extrair metadados do título e descrição
+    classification = classify(title, description)
 
     # 2. Orchestrator — navegar código via .iac/
     url = _extract_path_from_url(classification.get('url_erro'))
