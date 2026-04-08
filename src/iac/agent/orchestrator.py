@@ -142,14 +142,19 @@ def analyze_issue(
     _max_context_chars = max_context_chars or profile['max_context_chars']
     _max_refs = max_refs or profile['max_refs']
 
-    logger.debug(f'Perfil: model={model_name}, steps={_max_steps}, context={_max_context_chars}, refs={_max_refs}')
+    logger.info(f'[analyze_issue] Entrada: title="{title}", model={model_name}')
+    logger.debug(f'[analyze_issue] Perfil: steps={_max_steps}, context={_max_context_chars}, refs={_max_refs}')
 
-    # 1. Classifier — extrair metadados do título e descrição
+    # --- Camada 1: Classifier ---
+    logger.info('[Camada 1] Classifier — extraindo metadados da descrição')
     classification = classify(title, description)
-    logger.debug(f'Classifier resultado: {classification}')
+    logger.info(f'[Camada 1] Resultado: origem={classification["origem"]}, app={classification.get("app")}, erro_id={classification.get("erro_id")}')
+    logger.debug('[Camada 1] Classifier retornou:\n' + _fmt_dict(classification))
 
-    # 2. Orchestrator — navegar código via .iac/
+    # --- Camada 2: Orchestrator ---
+    logger.info('[Camada 2] Orchestrator — navegando código via .iac/')
     url = _extract_path_from_url(classification.get('url_erro'))
+    logger.debug(f'[Camada 2] Entrada: url={url}, traceback={bool(classification.get("traceback"))}')
     ctx = investigate(
         structure,
         graph,
@@ -161,34 +166,35 @@ def analyze_issue(
         max_context_chars=_max_context_chars,
         max_refs=_max_refs,
     )
-    logger.info(f'Orchestrator: {ctx.get("app")}.views.{ctx.get("view_name")} — {len(ctx.get("calls", []))} calls, {len(ctx.get("references", []))} refs, {ctx.get("steps_used")} passos')
-    logger.debug(f'Orchestrator view_source: {len(ctx.get("view_source", ""))} chars ({ctx.get("view_file")}:{ctx.get("view_line")})')
-    logger.debug(f'Orchestrator calls: {ctx.get("calls", [])}')
+    logger.info(f'[Camada 2] Resultado: {ctx.get("app")}.views.{ctx.get("view_name")} — {len(ctx.get("calls", []))} calls, {len(ctx.get("references", []))} refs, {ctx.get("steps_used")} passos')
+    logger.debug(f'[Camada 2] view_source: {len(ctx.get("view_source", ""))} chars ({ctx.get("view_file")}:{ctx.get("view_line")})')
+    logger.debug(f'[Camada 2] calls:\n' + '\n'.join(f'  - {c}' for c in ctx.get('calls', [])))
     for r in ctx.get('references', []):
-        logger.debug(f'Orchestrator ref: {r["call"]} → {r["key"]} ({r["file"]}:{r["line"]}, {len(r.get("source", "") or "")} chars)')
+        logger.debug(f'[Camada 2] ref: {r["call"]} → {r["key"]} ({r["file"]}:{r["line"]}, {len(r.get("source", "") or "")} chars)')
 
-    # 3. Análise estrutural — combinar classifier + orchestrator + grafo
+    # --- Camada 3: Análise estrutural ---
+    logger.info('[Camada 3] Structural — combinando classifier + orchestrator + grafo')
     structural = build_structural_analysis(classification, ctx, structure, graph)
-    logger.info(f'Structural: {len(structural.get("models", []))} models, {len(structural.get("forms", []))} forms, {len(structural.get("templates", []))} templates, {len(structural.get("flow", []))} passos no fluxo')
-    for m in structural.get('models', []):
-        logger.debug(f'Structural model: {m}')
-    for f in structural.get('forms', []):
-        logger.debug(f'Structural form: {f}')
-    for t in structural.get('templates', []):
-        logger.debug(f'Structural template: {t}')
-    for step in structural.get('flow', []):
-        logger.debug(f'Structural fluxo: {step["from"]} --[{step["type"]}]--> {step["to"]}')
+    logger.info(f'[Camada 3] Resultado: {len(structural.get("models", []))} models, {len(structural.get("forms", []))} forms, {len(structural.get("templates", []))} templates, {len(structural.get("flow", []))} passos no fluxo')
+    logger.debug('[Camada 3] models:\n' + '\n'.join(f'  - {m}' for m in structural.get('models', [])))
+    logger.debug('[Camada 3] forms:\n' + '\n'.join(f'  - {f}' for f in structural.get('forms', [])) or '  (nenhum)')
+    logger.debug('[Camada 3] templates:\n' + '\n'.join(f'  - {t}' for t in structural.get('templates', [])))
+    logger.debug('[Camada 3] fluxo:\n' + '\n'.join(f'  {s["from"]} --[{s["type"]}]--> {s["to"]}' for s in structural.get('flow', [])))
 
-    # 4. Análise profunda — navegar FKs em profundidade
+    # --- Camada 4: Análise profunda ---
+    logger.info('[Camada 4] Deep — navegando FKs em profundidade')
     deep = deep_investigate(
         ctx, structure, graph, base_dir,
         max_depth=profile['deep_max_depth'],
         max_context_chars=profile['deep_max_context_chars'],
         include_methods=profile['deep_include_methods'],
     )
-    logger.info(f'Deep: {len(deep)} models em profundidade')
-    for m in deep:
-        logger.debug(f'Deep depth={m["depth"]}: {m["fqn"]} — {len(m.get("fields", []))} fields, {len(m.get("constants", {}))} constantes, fk={m.get("fk_targets", [])}')
+    logger.info(f'[Camada 4] Resultado: {len(deep)} models em profundidade')
+    logger.debug('[Camada 4] models:\n' + '\n'.join(
+        f'  {"  " * m["depth"]}depth={m["depth"]}: {m["fqn"]} — {len(m.get("fields", []))} fields, '
+        f'{len(m.get("constants", {}))} constantes, fk={m.get("fk_targets", [])}'
+        for m in deep
+    ))
 
     return {
         'classification': classification,
@@ -485,6 +491,17 @@ def _is_generic_call(call: str) -> bool:
         if call.startswith(prefix):
             return True
     return False
+
+
+def _fmt_dict(d: dict, indent: int = 2) -> str:
+    """Formata um dict para log em múltiplas linhas."""
+    lines = []
+    prefix = ' ' * indent
+    for k, v in d.items():
+        if v is None or v == [] or v == '':
+            continue
+        lines.append(f'{prefix}{k}: {v}')
+    return '\n'.join(lines)
 
 
 def _parse_traceback(traceback: str, app_name: str | None) -> list[dict]:
