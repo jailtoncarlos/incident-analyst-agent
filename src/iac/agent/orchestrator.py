@@ -26,12 +26,85 @@ from iac.agent.tools import (
     resolver_rota,
     seguir_referencia,
 )
+from iac.analyzer.classifier import classify
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_STEPS = 10
 DEFAULT_MAX_CONTEXT_CHARS = 15000
 DEFAULT_MAX_REFS = 6
+
+
+# ---------------------------------------------------------------------------
+# Ponto de entrada único
+# ---------------------------------------------------------------------------
+
+
+def analyze_issue(
+    title: str,
+    description: str,
+    labels: list[str] | None,
+    structure: dict,
+    graph: dict,
+    base_dir: Path,
+    max_steps: int = DEFAULT_MAX_STEPS,
+    max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+    max_refs: int = DEFAULT_MAX_REFS,
+) -> dict:
+    """Ponto de entrada único para análise completa de um incidente.
+
+    Encadeia: classifier → orchestrator → análise estrutural.
+
+    Args:
+        title: Título da issue
+        description: Corpo/descrição da issue
+        labels: Labels da issue (ex: ['sentry', 'ponto'])
+        structure: Conteúdo de structure.json
+        graph: Conteúdo de graph.json
+        base_dir: Diretório raiz do projeto
+        max_steps: Orçamento de passos do orchestrator
+        max_context_chars: Limite de código no contexto
+        max_refs: Máximo de referências a seguir
+
+    Returns:
+        dict com:
+            classification: metadados extraídos da issue (classifier)
+            context: código navegado (orchestrator)
+            structural: componentes + fluxo (análise estrutural)
+    """
+    # 1. Classifier — extrair metadados da descrição
+    classification = classify(title, description, labels)
+
+    # 2. Orchestrator — navegar código via .iac/
+    url = _extract_path_from_url(classification.get('url_erro'))
+    ctx = investigate(
+        structure,
+        graph,
+        base_dir,
+        url=url,
+        description=description,
+        traceback=classification.get('traceback'),
+        max_steps=max_steps,
+        max_context_chars=max_context_chars,
+        max_refs=max_refs,
+    )
+
+    # 3. Análise estrutural — combinar classifier + orchestrator + grafo
+    structural = build_structural_analysis(classification, ctx, structure, graph)
+
+    return {
+        'classification': classification,
+        'context': ctx,
+        'structural': structural,
+    }
+
+
+def _extract_path_from_url(url: str | None) -> str | None:
+    """Extrai o path de uma URL completa."""
+    if not url:
+        return None
+    match = re.search(r'https?://[^/]+(/.+)', url)
+    return match.group(1) if match else None
 
 
 def investigate(
