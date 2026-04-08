@@ -51,6 +51,7 @@ def build_django_structure(base_dir: Path, config: dict) -> dict:
         app_data['forms'] = _parse_module(app_dir, 'forms')
         app_data['admin'] = _parse_admin(app_dir)
         app_data['urls'] = _parse_urls(app_dir)
+        _enrich_admin_urls(app_name, app_data)
         app_data['templates'] = _find_templates(app_dir)
 
         # Nível 2: inferir renders por convenção Django (app/template.html)
@@ -431,7 +432,10 @@ def _extract_meta_model(node: ast.ClassDef) -> str | None:
 
 
 def _parse_urls(app_dir: Path) -> list[dict]:
-    """Extrai padrões de URL do urls.py do app."""
+    """Extrai padrões de URL do urls.py do app.
+
+    Captura path() e re_path()/url() com regex.
+    """
     urls_file = app_dir / 'urls.py'
     if not urls_file.exists():
         return []
@@ -439,13 +443,24 @@ def _parse_urls(app_dir: Path) -> list[dict]:
     content = urls_file.read_text(encoding='utf-8', errors='replace')
     urls: list[dict] = []
 
-    # Regex para path('pattern/', view, name='name')
+    # path('pattern/', view, ...)
     for match in re.finditer(r"path\(\s*['\"]([^'\"]*)['\"],\s*(\w[\w.]*)", content):
         pattern = match.group(1)
         view = match.group(2)
         urls.append({'pattern': f'/{pattern}', 'view': view})
 
-    return urls[:50]  # limitar a 50 URLs
+    # re_path(r'pattern/', view, ...) e url(r'pattern/', view, ...)
+    for match in re.finditer(r"(?:re_path|url)\(\s*r?['\"]([^'\"]*)['\"],\s*(\w[\w.]*)", content):
+        pattern = match.group(1)
+        view = match.group(2)
+        # Converter regex para formato legível: (?P<name>...) → <name>
+        pattern = re.sub(r'\(\?P<(\w+)>[^)]+\)', r'<\1>', pattern)
+        pattern = pattern.lstrip('^').rstrip('$')
+        if not pattern.startswith('/'):
+            pattern = f'/{pattern}'
+        urls.append({'pattern': pattern, 'view': view})
+
+    return urls[:100]  # limitar a 100 URLs
 
 
 def _parse_admin(app_dir: Path) -> dict[str, dict]:
@@ -543,6 +558,31 @@ def _parse_admin(app_dir: Path) -> dict[str, dict]:
                         }
 
     return result
+
+
+def _enrich_admin_urls(app_name: str, app_data: dict) -> None:
+    """Gera URL patterns do Django admin para models registrados.
+
+    Django admin cria automaticamente:
+        /admin/{app_label}/{model_name}/          (changelist)
+        /admin/{app_label}/{model_name}/<int:pk>/  (change)
+        /admin/{app_label}/{model_name}/add/       (add)
+    """
+    admin_classes = app_data.get('admin', {})
+    models = app_data.get('models', {})
+
+    registered_models = set()
+    for admin_data in admin_classes.values():
+        for model_ref in admin_data.get('models', []):
+            if model_ref in models:
+                registered_models.add(model_ref)
+
+    for model_name in registered_models:
+        model_lower = model_name.lower()
+        app_data['urls'].append({
+            'pattern': f'/admin/{app_name}/{model_lower}/',
+            'view': f'admin.{model_name}',
+        })
 
 
 def _find_templates(app_dir: Path) -> list[str]:

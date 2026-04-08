@@ -40,21 +40,26 @@ def resolver_rota(url_path: str, structure: dict) -> dict | None:
     """
     # Limpar query string e fragment
     url_path = re.sub(r'[?#].*', '', url_path)
-    # Normalizar: remover IDs numéricos para casar com patterns parametrizados
-    normalized = re.sub(r'/\d+', '/<int>', url_path)
-    # Normalizar: segmentos slug (não-numéricos, não-path) → <slug>
-    normalized = re.sub(r'/([a-z][\w-]*[a-z\d])(?=/|$)', lambda m: f'/<slug>' if '-' in m.group(1) else m.group(0), normalized)
-    normalized = normalized.rstrip('/')
+    # Gerar variantes de normalização (IDs podem ser <int> ou <str>)
+    norm_int = re.sub(r'/\d+', '/<int>', url_path)
+    norm_str = re.sub(r'/\d+', '/<str>', url_path)
+    # Normalizar slugs com hífens → <slug>
+    norm_int = re.sub(r'/([a-z][\w-]*[a-z\d])(?=/|$)', lambda m: '/<slug>' if '-' in m.group(1) else m.group(0), norm_int)
+    norm_str = re.sub(r'/([a-z][\w-]*[a-z\d])(?=/|$)', lambda m: '/<slug>' if '-' in m.group(1) else m.group(0), norm_str)
+    normalizations = [norm_int.rstrip('/')]
+    if norm_str != norm_int:
+        normalizations.append(norm_str.rstrip('/'))
 
     best_match = None
     best_score = -1
 
     for app_name, app_data in structure.get('apps', {}).items():
-        # Gerar variantes sem o prefixo do app
-        candidates = [normalized]
+        # Gerar variantes sem o prefixo do app para cada normalização
+        candidates = list(normalizations)
         prefix = f'/{app_name}'
-        if normalized.startswith(prefix):
-            candidates.append(normalized[len(prefix):])
+        for norm in normalizations:
+            if norm.startswith(prefix):
+                candidates.append(norm[len(prefix):])
 
         for url_entry in app_data.get('urls', []):
             pattern = url_entry['pattern'].rstrip('/')
