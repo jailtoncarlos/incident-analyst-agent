@@ -226,7 +226,19 @@ def _extract_view_from_traceback(traceback: str, structure: dict) -> dict | None
 
 def _extract_view_from_description(description: str, structure: dict) -> dict | None:
     """Extrai app e view de uma descrição tentando encontrar URLs ou nomes de view."""
-    # Procurar URLs — extrair path completo após o host
+    # 1. Procurar campo **View**: app.views.func (formato das issues SUAP)
+    view_field = re.search(r'\*\*View\*\*\s*:\s*(\w+)\.views\.(\w+)', description)
+    if view_field:
+        loc = localizar_arquivo(f'{view_field.group(1)}.views.{view_field.group(2)}', structure)
+        if loc:
+            return {
+                'app': loc['app'],
+                'view_name': loc['name'],
+                'view_file': loc['file'],
+                'view_line': loc['line'],
+            }
+
+    # 2. Procurar URLs — extrair path completo após o host
     url_match = re.search(r'https?://[^/\s]+((?:/[^\s?#]*)+)', description)
     if url_match:
         rota = resolver_rota(url_match.group(1), structure)
@@ -238,7 +250,7 @@ def _extract_view_from_description(description: str, structure: dict) -> dict | 
                 'view_line': rota['line'],
             }
 
-    # Procurar menções a app.views.func
+    # 3. Procurar menções a app.views.func
     for match in re.finditer(r'(\w+)\.views\.(\w+)', description):
         loc = localizar_arquivo(f'{match.group(1)}.views.{match.group(2)}', structure)
         if loc:

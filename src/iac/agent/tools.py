@@ -38,8 +38,12 @@ def resolver_rota(url_path: str, structure: dict) -> dict | None:
     Returns:
         dict com app, view_name, file, line ou None se não encontrar.
     """
+    # Limpar query string e fragment
+    url_path = re.sub(r'[?#].*', '', url_path)
     # Normalizar: remover IDs numéricos para casar com patterns parametrizados
     normalized = re.sub(r'/\d+', '/<int>', url_path)
+    # Normalizar: segmentos slug (não-numéricos, não-path) → <slug>
+    normalized = re.sub(r'/([a-z][\w-]*[a-z\d])(?=/|$)', lambda m: f'/<slug>' if '-' in m.group(1) else m.group(0), normalized)
     normalized = normalized.rstrip('/')
 
     best_match = None
