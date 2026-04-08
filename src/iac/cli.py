@@ -185,7 +185,7 @@ def analyze(
     logger.info(f'Base dir: {base}')
     logger.info(f'Issue URL: {issue_url or "(não informado)"}')
     logger.info(f'Título: {title or "(não informado)"}')
-    logger.info(f'Descrição: {description[:150] + "..." if len(description) > 150 else description or "(não informado)"}')
+    logger.info(f'Descrição: {description or "(não informado)"}')
     logger.info(f'LLM: backend={llm or "(não informado)"}, modelo={llm_model}, url={llm_url or "(config)"}')
     logger.info(f'Modo: {mode}')
     if issue_id:

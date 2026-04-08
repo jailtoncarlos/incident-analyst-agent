@@ -50,7 +50,7 @@ def chat(
         return None
 
     if response.status_code != 200:
-        logger.error(f'Gemini API erro: {response.status_code} - {response.text[:200]}')
+        logger.error(f'Gemini API erro: {response.status_code} - {response.text}')
         return None
 
     try:

@@ -57,7 +57,7 @@ def chat(
         return None
 
     if response.status_code != 200:
-        logger.error(f'Ollama API erro: {response.status_code} - {response.text[:200]}')
+        logger.error(f'Ollama API erro: {response.status_code} - {response.text}')
         return None
 
     try:
