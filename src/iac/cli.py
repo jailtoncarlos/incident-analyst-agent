@@ -105,6 +105,7 @@ def analyze(
         sys.exit(1)
 
     from iac.config.settings import load_graph, load_structure, get_effective_config
+    from iac.config.tracer import Tracer
     from iac.agent.orchestrator import analyze_issue, format_structural_analysis, format_context_for_prompt, get_model_profile
     from iac.agent.prompts import (
         build_analysis_prompt, build_response_prompt, extract_tipo_from_analysis,
@@ -168,6 +169,9 @@ def analyze(
     if not description:
         description = ''
 
+    # Tracer — logging por camada
+    tracer = Tracer(iac_dir, issue_id=str(issue_id) if issue_id else None)
+
     # 2. Análise completa
     click.echo(f'Analisando (modelo: {llm_model})...')
     result = analyze_issue(
@@ -177,6 +181,7 @@ def analyze(
         graph=graph,
         base_dir=base,
         model_name=llm_model,
+        tracer=tracer,
     )
 
     # 3. Exibir análise estrutural
@@ -218,37 +223,46 @@ def analyze(
         # --- MODO MULTI-PROMPT ---
         click.echo(f'\n[Modo multi-prompt] Passo 1: investigação...')
         investigation_prompt = build_investigation_prompt(result)
+        tracer.log_prompt('investigation', investigation_prompt)
         click.echo(f'Enviando prompt ao {llm} ({llm_model}, {len(investigation_prompt)} chars)...')
 
         investigation_response = _send_llm(investigation_prompt)
+        tracer.log_llm_response('investigation', investigation_response)
         if investigation_response:
             click.echo('\n--- Passo 1: O que o LLM quer investigar ---\n')
             click.echo(investigation_response)
 
             # Parsear pedidos
             requests = parse_investigation_requests(investigation_response)
+            tracer.log_step('evidence_requests', {'requests': requests})
             if requests:
                 click.echo(f'\n[Modo multi-prompt] Passo 2: resolvendo {len(requests)} pedidos...')
                 evidence = resolve_investigation_requests(requests, structure, graph, base)
+                tracer.log_text('evidence_resolved', evidence)
                 click.echo(f'Evidência coletada: {len(evidence)} chars')
 
                 # Enviar evidência + pedir análise final
                 evidence_prompt = build_evidence_prompt(evidence)
+                tracer.log_prompt('analysis', evidence_prompt)
                 click.echo(f'Enviando prompt final ao {llm} ({len(evidence_prompt)} chars)...')
                 llm_analysis = _send_llm(evidence_prompt)
+                tracer.log_llm_response('analysis', llm_analysis)
             else:
                 click.echo('LLM não pediu investigação adicional.')
-                # Fallback: usar prompt único
                 prompt = build_analysis_prompt(result)
+                tracer.log_prompt('analysis_fallback', prompt)
                 llm_analysis = _send_llm(prompt)
+                tracer.log_llm_response('analysis_fallback', llm_analysis)
         else:
             click.echo('LLM não respondeu no passo 1.')
 
     elif llm:
         # --- MODO SINGLE-PROMPT ---
         prompt = build_analysis_prompt(result)
+        tracer.log_prompt('analysis', prompt)
         click.echo(f'\nEnviando prompt ao {llm} ({llm_model}, {len(prompt)} chars)...')
         llm_analysis = _send_llm(prompt)
+        tracer.log_llm_response('analysis', llm_analysis)
 
     if llm_analysis:
         click.echo('\n--- Análise do LLM ---\n')
@@ -262,11 +276,18 @@ def analyze(
             if tipo not in result['classification']['labels_sugeridos']:
                 result['classification']['labels_sugeridos'].append(tipo)
 
+        tracer.log_step('classification_result', {
+            'tipo': tipo,
+            'labels': result['classification'].get('labels_sugeridos', []),
+        })
+
         # Gerar resposta ao usuário (se tem interessado)
         if result['classification'].get('interessado'):
             response_prompt = build_response_prompt(result, llm_analysis)
+            tracer.log_prompt('response', response_prompt)
             click.echo(f'\nGerando resposta ao usuário...')
             response_text = _send_llm(response_prompt)
+            tracer.log_llm_response('response', response_text)
             if response_text:
                 click.echo('\n--- Rascunho de resposta ---\n')
                 click.echo(response_text)

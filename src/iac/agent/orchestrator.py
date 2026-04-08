@@ -107,6 +107,7 @@ def analyze_issue(
     max_steps: int | None = None,
     max_context_chars: int | None = None,
     max_refs: int | None = None,
+    tracer=None,
 ) -> dict:
     """Ponto de entrada único para análise completa de um incidente.
 
@@ -136,14 +137,29 @@ def analyze_issue(
             deep: models em profundidade (análise profunda)
             profile: perfil de contexto usado
     """
+    from iac.config.tracer import NullTracer
+
+    if tracer is None:
+        tracer = NullTracer()
+
     # Perfil de contexto baseado no modelo
     profile = get_model_profile(model_name)
     _max_steps = max_steps or profile['max_steps']
     _max_context_chars = max_context_chars or profile['max_context_chars']
     _max_refs = max_refs or profile['max_refs']
 
+    tracer.log_metadata(
+        title=title,
+        model_name=model_name,
+        profile={k: v for k, v in profile.items()},
+        max_steps=_max_steps,
+        max_context_chars=_max_context_chars,
+        max_refs=_max_refs,
+    )
+
     # 1. Classifier — extrair metadados do título e descrição
     classification = classify(title, description)
+    tracer.log_step('classifier', classification)
 
     # 2. Orchestrator — navegar código via .iac/
     url = _extract_path_from_url(classification.get('url_erro'))
@@ -158,9 +174,33 @@ def analyze_issue(
         max_context_chars=_max_context_chars,
         max_refs=_max_refs,
     )
+    tracer.log_step('orchestrator', {
+        'status': ctx.get('status'),
+        'app': ctx.get('app'),
+        'view_name': ctx.get('view_name'),
+        'view_file': ctx.get('view_file'),
+        'view_line': ctx.get('view_line'),
+        'calls': ctx.get('calls', []),
+        'references': [
+            {'call': r['call'], 'key': r['key'], 'file': r['file'], 'line': r['line']}
+            for r in ctx.get('references', [])
+        ],
+        'steps_used': ctx.get('steps_used'),
+        'context_chars': ctx.get('context_chars'),
+    })
 
     # 3. Análise estrutural — combinar classifier + orchestrator + grafo
     structural = build_structural_analysis(classification, ctx, structure, graph)
+    tracer.log_step('structural', {
+        'app': structural.get('app'),
+        'view': structural.get('view'),
+        'models': structural.get('models', []),
+        'forms': structural.get('forms', []),
+        'templates': structural.get('templates', []),
+        'admin': structural.get('admin', []),
+        'related_models': structural.get('related_models', []),
+        'flow_steps': len(structural.get('flow', [])),
+    })
 
     # 4. Análise profunda — navegar FKs em profundidade
     deep = deep_investigate(
@@ -169,6 +209,20 @@ def analyze_issue(
         max_context_chars=profile['deep_max_context_chars'],
         include_methods=profile['deep_include_methods'],
     )
+    tracer.log_step('deep_investigate', {
+        'models_count': len(deep),
+        'models': [
+            {
+                'fqn': m['fqn'],
+                'depth': m['depth'],
+                'fields_count': len(m.get('fields', [])),
+                'methods_count': len(m.get('methods', {})),
+                'constants_count': len(m.get('constants', {})),
+                'fk_targets': m.get('fk_targets', []),
+            }
+            for m in deep
+        ],
+    })
 
     return {
         'classification': classification,
@@ -176,6 +230,7 @@ def analyze_issue(
         'structural': structural,
         'deep': deep,
         'profile': profile,
+        '_tracer': tracer,
     }
 
 
