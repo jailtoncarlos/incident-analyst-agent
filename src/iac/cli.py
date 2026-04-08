@@ -75,6 +75,7 @@ def init(base_dir: str, force: bool, stats: bool):
 @click.option('--llm-key', type=str, default=None, help='API key do LLM.')
 @click.option('--llm-model', type=str, default='qwen2.5:7b', help='Modelo do LLM.')
 @click.option('--gitlab-token', type=str, envvar='GITLAB_TOKEN', default=None, help='Token GitLab.')
+@click.option('--mode', type=click.Choice(['auto', 'single', 'multi']), default='auto', help='Modo: auto (detecta pelo modelo), single (1 prompt), multi (iterativo).')
 @click.option('--dry-run', is_flag=True, help='Não posta comentários nem aplica labels.')
 @click.option('--post', is_flag=True, help='Postar análise como comentário na issue.')
 def analyze(
@@ -87,6 +88,7 @@ def analyze(
     llm_key: str,
     llm_model: str,
     gitlab_token: str,
+    mode: str,
     dry_run: bool,
     post: bool,
 ):
@@ -103,8 +105,12 @@ def analyze(
         sys.exit(1)
 
     from iac.config.settings import load_graph, load_structure
-    from iac.agent.orchestrator import analyze_issue, format_structural_analysis, format_context_for_prompt
-    from iac.agent.prompts import build_analysis_prompt, build_response_prompt, extract_tipo_from_analysis
+    from iac.agent.orchestrator import analyze_issue, format_structural_analysis, format_context_for_prompt, get_model_profile
+    from iac.agent.prompts import (
+        build_analysis_prompt, build_response_prompt, extract_tipo_from_analysis,
+        build_investigation_prompt, parse_investigation_requests,
+        resolve_investigation_requests, build_evidence_prompt,
+    )
 
     structure = load_structure(iac_dir)
     graph = load_graph(iac_dir)
@@ -155,6 +161,7 @@ def analyze(
         structure=structure,
         graph=graph,
         base_dir=base,
+        model_name=llm_model if llm else None,
     )
 
     # 3. Exibir análise estrutural
@@ -162,51 +169,94 @@ def analyze(
     click.echo('')
     click.echo(structural_text)
 
-    # 4. Enviar ao LLM (se configurado)
-    llm_analysis = None
-    if llm:
-        prompt = build_analysis_prompt(result)
-        click.echo(f'\nEnviando prompt ao {llm} ({llm_model}, {len(prompt)} chars)...')
+    # 4. Determinar modo
+    if mode == 'auto' and llm:
+        profile = get_model_profile(llm_model)
+        use_multi = profile is get_model_profile('qwen2.5:7b')  # small → multi
+        # Heurística: small usa multi, medium/large usa single
+        for profile_name, profile_val in __import__('iac.agent.orchestrator', fromlist=['MODEL_PROFILES']).MODEL_PROFILES.items():
+            if profile is profile_val:
+                use_multi = profile_name == 'small'
+                break
+    elif mode == 'multi':
+        use_multi = True
+    else:
+        use_multi = False
 
+    # Helper para enviar ao LLM
+    def _send_llm(prompt_text):
         if llm == 'ollama':
             from iac.integrations import ollama
-            if not llm_url:
-                llm_url = 'http://localhost:11434/v1/chat/completions'
-            llm_analysis = ollama.chat(prompt, url=llm_url, model=llm_model, api_key=llm_key)
+            _url = llm_url or 'http://localhost:11434/v1/chat/completions'
+            return ollama.chat(prompt_text, url=_url, model=llm_model, api_key=llm_key)
         elif llm == 'gemini':
             from iac.integrations import gemini
             if not llm_url or not llm_key:
                 click.echo('Gemini requer --llm-url e --llm-key.')
-                sys.exit(1)
-            llm_analysis = gemini.chat(prompt, url=llm_url, api_key=llm_key)
+                return None
+            return gemini.chat(prompt_text, url=llm_url, api_key=llm_key)
+        return None
 
-        if llm_analysis:
-            click.echo('\n--- Análise do LLM ---\n')
-            click.echo(llm_analysis)
+    # 5. Enviar ao LLM
+    llm_analysis = None
+    if llm and use_multi:
+        # --- MODO MULTI-PROMPT ---
+        click.echo(f'\n[Modo multi-prompt] Passo 1: investigação...')
+        investigation_prompt = build_investigation_prompt(result)
+        click.echo(f'Enviando prompt ao {llm} ({llm_model}, {len(investigation_prompt)} chars)...')
 
-            # Extrair tipo
-            tipo = extract_tipo_from_analysis(llm_analysis)
-            if tipo:
-                click.echo(f'\nClassificação: {tipo}')
-                result['classification']['tipo_sugerido'] = tipo
-                if tipo not in result['classification']['labels_sugeridos']:
-                    result['classification']['labels_sugeridos'].append(tipo)
+        investigation_response = _send_llm(investigation_prompt)
+        if investigation_response:
+            click.echo('\n--- Passo 1: O que o LLM quer investigar ---\n')
+            click.echo(investigation_response)
 
-            # Gerar resposta ao usuário (se tem interessado)
-            if result['classification'].get('interessado'):
-                response_prompt = build_response_prompt(result, llm_analysis)
-                click.echo(f'\nGerando resposta ao usuário...')
+            # Parsear pedidos
+            requests = parse_investigation_requests(investigation_response)
+            if requests:
+                click.echo(f'\n[Modo multi-prompt] Passo 2: resolvendo {len(requests)} pedidos...')
+                evidence = resolve_investigation_requests(requests, structure, graph, base)
+                click.echo(f'Evidência coletada: {len(evidence)} chars')
 
-                if llm == 'ollama':
-                    response_text = ollama.chat(response_prompt, url=llm_url, model=llm_model, api_key=llm_key)
-                elif llm == 'gemini':
-                    response_text = gemini.chat(response_prompt, url=llm_url, api_key=llm_key)
-
-                if response_text:
-                    click.echo('\n--- Rascunho de resposta ---\n')
-                    click.echo(response_text)
+                # Enviar evidência + pedir análise final
+                evidence_prompt = build_evidence_prompt(evidence)
+                click.echo(f'Enviando prompt final ao {llm} ({len(evidence_prompt)} chars)...')
+                llm_analysis = _send_llm(evidence_prompt)
+            else:
+                click.echo('LLM não pediu investigação adicional.')
+                # Fallback: usar prompt único
+                prompt = build_analysis_prompt(result)
+                llm_analysis = _send_llm(prompt)
         else:
-            click.echo('LLM não retornou resposta.')
+            click.echo('LLM não respondeu no passo 1.')
+
+    elif llm:
+        # --- MODO SINGLE-PROMPT ---
+        prompt = build_analysis_prompt(result)
+        click.echo(f'\nEnviando prompt ao {llm} ({llm_model}, {len(prompt)} chars)...')
+        llm_analysis = _send_llm(prompt)
+
+    if llm_analysis:
+        click.echo('\n--- Análise do LLM ---\n')
+        click.echo(llm_analysis)
+
+        # Extrair tipo
+        tipo = extract_tipo_from_analysis(llm_analysis)
+        if tipo:
+            click.echo(f'\nClassificação: {tipo}')
+            result['classification']['tipo_sugerido'] = tipo
+            if tipo not in result['classification']['labels_sugeridos']:
+                result['classification']['labels_sugeridos'].append(tipo)
+
+        # Gerar resposta ao usuário (se tem interessado)
+        if result['classification'].get('interessado'):
+            response_prompt = build_response_prompt(result, llm_analysis)
+            click.echo(f'\nGerando resposta ao usuário...')
+            response_text = _send_llm(response_prompt)
+            if response_text:
+                click.echo('\n--- Rascunho de resposta ---\n')
+                click.echo(response_text)
+    elif llm:
+        click.echo('LLM não retornou resposta.')
 
     # 5. Labels sugeridos
     labels = result['classification'].get('labels_sugeridos', [])
