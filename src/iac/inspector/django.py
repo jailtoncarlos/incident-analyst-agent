@@ -49,6 +49,7 @@ def build_django_structure(base_dir: Path, config: dict) -> dict:
         app_data['views'] = _parse_module(app_dir, 'views')
         app_data['models'] = _parse_module(app_dir, 'models')
         app_data['forms'] = _parse_module(app_dir, 'forms')
+        app_data['admin'] = _parse_admin(app_dir)
         app_data['urls'] = _parse_urls(app_dir)
         app_data['templates'] = _find_templates(app_dir)
 
@@ -276,6 +277,10 @@ def _parse_python_file(file_path: Path, app_dir: Path) -> dict[str, dict]:
             methods = _extract_methods(node)
             if methods:
                 entry['methods'] = methods
+            # Extrair referências FK/M2M (para models)
+            fk_refs = _extract_fk_references(node)
+            if fk_refs:
+                entry['fk_references'] = fk_refs
             # Extrair Meta.model (para forms)
             meta_model = _extract_meta_model(node)
             if meta_model:
@@ -380,6 +385,24 @@ def _extract_model_fields(node: ast.ClassDef) -> list[str]:
     return fields
 
 
+def _extract_fk_references(node: ast.ClassDef) -> list[str]:
+    """Extrai models referenciados via ForeignKey, OneToOne e ManyToMany."""
+    refs: list[str] = []
+    fk_types = ('ForeignKey', 'ForeignKeyPlus', 'OneToOneField', 'OneToOneFieldPlus', 'ManyToManyField', 'ManyToManyFieldPlus')
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.Assign) and isinstance(child.value, ast.Call):
+            call_name = _call_name(child.value)
+            if call_name and any(fk in call_name for fk in fk_types):
+                # Primeiro argumento posicional é o model referenciado
+                if child.value.args:
+                    arg = child.value.args[0]
+                    if isinstance(arg, ast.Name) and arg.id not in refs:
+                        refs.append(arg.id)
+                    elif isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value not in refs:
+                        refs.append(arg.value)
+    return refs
+
+
 def _extract_methods(node: ast.ClassDef) -> list[str]:
     """Extrai nomes de métodos de uma classe."""
     methods: list[str] = []
@@ -423,6 +446,103 @@ def _parse_urls(app_dir: Path) -> list[dict]:
         urls.append({'pattern': f'/{pattern}', 'view': view})
 
     return urls[:50]  # limitar a 50 URLs
+
+
+def _parse_admin(app_dir: Path) -> dict[str, dict]:
+    """Extrai classes ModelAdmin e models registrados do admin.py.
+
+    Captura:
+        - @admin.register(Model) ou admin.site.register(Model, ModelAdmin)
+        - Atributos: list_display, list_filter, search_fields, inlines, form
+    """
+    admin_file = app_dir / 'admin.py'
+    if not admin_file.exists():
+        return {}
+
+    try:
+        source = admin_file.read_text(encoding='utf-8', errors='replace')
+        try:
+            tree = ast.parse(source, filename=str(admin_file))
+        except SyntaxError:
+            source = _fix_legacy_syntax(source)
+            tree = ast.parse(source, filename=str(admin_file))
+    except SyntaxError:
+        return {}
+
+    result: dict[str, dict] = {}
+    relative = str(admin_file.relative_to(app_dir.parent))
+
+    # 1. Parsear classes (ModelAdmin) com decorador @admin.register(...)
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.ClassDef):
+            entry: dict = {
+                'file': relative,
+                'line': node.lineno,
+                'type': 'class',
+                'models': [],
+                'form': None,
+                'inlines': [],
+            }
+
+            # Extrair models do decorador @admin.register(Model1, Model2)
+            for decorator in node.decorator_list:
+                if isinstance(decorator, ast.Call):
+                    dec_name = _call_name(decorator)
+                    if dec_name and 'register' in dec_name:
+                        for arg in decorator.args:
+                            if isinstance(arg, ast.Name):
+                                entry['models'].append(arg.id)
+
+            # Extrair atributos: form, inlines, list_display, etc.
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, ast.Assign):
+                    for target in child.targets:
+                        if not isinstance(target, ast.Name):
+                            continue
+                        if target.id == 'form' and isinstance(child.value, ast.Name):
+                            entry['form'] = child.value.id
+                        elif target.id == 'inlines' and isinstance(child.value, ast.List | ast.Tuple):
+                            for elt in child.value.elts:
+                                if isinstance(elt, ast.Name):
+                                    entry['inlines'].append(elt.id)
+
+            if entry['models'] or entry['form']:
+                result[node.name] = entry
+
+    # 2. Capturar admin.site.register(Model, Admin) fora de classes
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            call_name = _call_name(node.value)
+            if call_name and 'register' in call_name:
+                args = node.value.args
+                if args and isinstance(args[0], ast.Name):
+                    model_name = args[0].id
+                    admin_name = args[1].id if len(args) > 1 and isinstance(args[1], ast.Name) else None
+                    if admin_name and admin_name in result:
+                        if model_name not in result[admin_name]['models']:
+                            result[admin_name]['models'].append(model_name)
+                    elif admin_name:
+                        result[admin_name] = {
+                            'file': relative,
+                            'line': node.lineno,
+                            'type': 'class',
+                            'models': [model_name],
+                            'form': None,
+                            'inlines': [],
+                        }
+                    else:
+                        # register(Model) sem admin class
+                        key = f'{model_name}Admin_auto'
+                        result[key] = {
+                            'file': relative,
+                            'line': node.lineno,
+                            'type': 'auto',
+                            'models': [model_name],
+                            'form': None,
+                            'inlines': [],
+                        }
+
+    return result
 
 
 def _find_templates(app_dir: Path) -> list[str]:

@@ -33,7 +33,42 @@ def build_graph(structure: dict) -> dict:
         views = app_data.get('views', {})
         models = app_data.get('models', {})
         forms = app_data.get('forms', {})
+        admin = app_data.get('admin', {})
         urls = app_data.get('urls', [])
+
+        # Admin → Model / Admin → Form
+        for admin_name, admin_data in admin.items():
+            admin_fqn = f'{app_name}.admin.{admin_name}'
+            for model_ref in admin_data.get('models', []):
+                target_app_am, target_model_am = _resolve_model(model_ref, app_name, models, global_models)
+                if target_model_am:
+                    edges.append(
+                        {
+                            'from': admin_fqn,
+                            'to': f'{target_app_am}.models.{target_model_am}',
+                            'type': 'admin_register',
+                        }
+                    )
+            form_ref = admin_data.get('form')
+            if form_ref:
+                target_app_af, target_form_af = _resolve_form(form_ref, form_ref, app_name, forms, global_forms)
+                if target_form_af:
+                    edges.append(
+                        {
+                            'from': admin_fqn,
+                            'to': f'{target_app_af}.forms.{target_form_af}',
+                            'type': 'admin_form',
+                        }
+                    )
+            for inline_ref in admin_data.get('inlines', []):
+                if inline_ref in admin:
+                    edges.append(
+                        {
+                            'from': admin_fqn,
+                            'to': f'{app_name}.admin.{inline_ref}',
+                            'type': 'admin_inline',
+                        }
+                    )
 
         # URL → View
         for url_entry in urls:
@@ -111,6 +146,35 @@ def build_graph(structure: dict) -> dict:
                             'from': f'{app_name}.forms.{form_name}',
                             'to': f'{target_app_fm}.models.{target_model_fm}',
                             'type': 'form_model',
+                        }
+                    )
+
+        # Form → Model (via calls: Model.objects em campos de formulário)
+        for form_name, form_data in forms.items():
+            for call in form_data.get('calls', []):
+                call_head = call.split('.')[0] if '.' in call else call
+                if not call_head[0:1].isupper():
+                    continue
+                target_app_fc, target_model_fc = _resolve_model(call_head, app_name, models, global_models)
+                if target_model_fc:
+                    edges.append(
+                        {
+                            'from': f'{app_name}.forms.{form_name}',
+                            'to': f'{target_app_fc}.models.{target_model_fc}',
+                            'type': 'form_usage',
+                        }
+                    )
+
+        # Model → Model (via ForeignKey, OneToOne, ManyToMany)
+        for model_name, model_data in models.items():
+            for ref in model_data.get('fk_references', []):
+                target_app_fk, target_model_fk = _resolve_model(ref, app_name, models, global_models)
+                if target_model_fk and target_model_fk != model_name:
+                    edges.append(
+                        {
+                            'from': f'{app_name}.models.{model_name}',
+                            'to': f'{target_app_fk}.models.{target_model_fk}',
+                            'type': 'model_relation',
                         }
                     )
 

@@ -138,6 +138,20 @@ def generate_app_detail_data(iac_dir: Path, app_name: str) -> dict:
         )
         node_ids.add(node_id)
 
+    # Admin
+    for name, data in app_data.get('admin', {}).items():
+        node_id = f'{app_name}.admin.{name}'
+        nodes.append(
+            {
+                'id': node_id,
+                'label': name,
+                'type': 'admin',
+                'file': data.get('file', ''),
+                'line': data.get('line', 0),
+            }
+        )
+        node_ids.add(node_id)
+
     # Templates (só os que têm arestas)
     templates_with_edges = set()
     for edge in graph.get('edges', []):

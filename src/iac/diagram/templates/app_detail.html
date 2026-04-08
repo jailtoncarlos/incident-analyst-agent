@@ -21,9 +21,17 @@ svg { width: 100%; height: 100%; }
 .tooltip .meta { color: #484f58; }
 .node-label { font-size: 10px; fill: #c9d1d9; text-anchor: middle; pointer-events: none; }
 .link { stroke-opacity: 0.2; }
-.legend { position: fixed; top: 12px; right: 12px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 12px; }
-.legend div { margin: 3px 0; display: flex; align-items: center; gap: 6px; }
-.legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.legend { position: fixed; top: 12px; right: 12px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; font-size: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.legend .legend-item { margin: 4px 0; display: flex; align-items: center; gap: 6px; }
+.legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.legend .line-sample { display: inline-block; width: 20px; height: 2px; flex-shrink: 0; }
+.legend-header { cursor: pointer; user-select: none; margin-bottom: 4px; }
+.legend-header:hover b { color: #58a6ff; }
+.legend-toggle { font-size: 9px; color: #484f58; transition: transform 0.2s; display: inline-block; }
+.legend-toggle.collapsed { transform: rotate(-90deg); }
+.legend-body { }
+.legend-body.collapsed { display: none; }
+.legend-section-title { color: #8b949e; font-size: 11px; font-weight: 600; margin-top: 10px; margin-bottom: 2px; }
 .back-link { position: fixed; top: 12px; left: 12px; z-index: 10; }
 .back-link a { color: #58a6ff; text-decoration: none; font-size: 13px; }
 </style>
@@ -39,35 +47,59 @@ svg { width: 100%; height: 100%; }
     <button class="filter" data-type="form">Forms</button>
     <button class="filter" data-type="template">Templates</button>
     <button class="filter" data-type="url">URLs</button>
+    <button class="filter" data-type="admin">Admin</button>
   </div>
-  <div class="legend">
-    <div><b id="app-title"></b></div>
-    <div style="margin-top:8px;color:#8b949e;font-size:11px;font-weight:600">Componentes</div>
-    <div><span class="dot" style="background:#58a6ff"></span> View</div>
-    <div><span class="dot" style="background:#7ee787"></span> Model</div>
-    <div><span class="dot" style="background:#f0883e"></span> Form</div>
-    <div><span class="dot" style="background:#bc8cff"></span> Template</div>
-    <div><span class="dot" style="background:#484f58"></span> URL</div>
-    <div style="margin-top:10px;color:#8b949e;font-size:11px;font-weight:600">Filtros</div>
-    <div style="color:#484f58;font-size:11px">Clique nos botões acima para filtrar</div>
-    <div style="color:#484f58;font-size:11px">Combine tipos: Models + Forms</div>
-    <div style="margin-top:10px;color:#8b949e;font-size:11px;font-weight:600">Navegação</div>
-    <div style="color:#484f58;font-size:11px">Scroll = zoom</div>
-    <div style="color:#484f58;font-size:11px">Arrastar fundo = mover tudo</div>
-    <div style="color:#484f58;font-size:11px">Arrastar nó = fixa posição</div>
-    <div style="color:#484f58;font-size:11px">Duplo-clique = libera nó</div>
-    <div style="margin-top:10px;color:#8b949e;font-size:11px;font-weight:600">Seleção</div>
-    <div style="color:#484f58;font-size:11px">Clique no nó = mostra conexões</div>
-    <div style="color:#484f58;font-size:11px">Clique de novo = deseleciona</div>
-    <div style="margin-top:10px;color:#8b949e;font-size:11px;font-weight:600">Busca</div>
-    <div style="color:#484f58;font-size:11px">Digite para filtrar por nome</div>
-    <div style="color:#484f58;font-size:11px">Enter = zoom no resultado</div>
-    <div style="color:#484f58;font-size:11px">Esc = limpar busca</div>
+  <div class="legend" id="legend">
+    <div class="legend-header" onclick="toggleLegend()">
+      <span class="legend-toggle" id="legend-toggle">&#9660;</span>
+      <b id="app-title"></b>
+    </div>
+    <div class="legend-body" id="legend-body">
+      <div class="legend-section-title">Componentes (nós)</div>
+      <div class="legend-item"><span class="dot" style="background:#58a6ff"></span> View</div>
+      <div class="legend-item"><span class="dot" style="background:#7ee787"></span> Model</div>
+      <div class="legend-item"><span class="dot" style="background:#f0883e"></span> Form</div>
+      <div class="legend-item"><span class="dot" style="background:#bc8cff"></span> Template</div>
+      <div class="legend-item"><span class="dot" style="background:#484f58"></span> URL</div>
+      <div class="legend-item"><span class="dot" style="background:#f778ba"></span> Admin</div>
+
+      <div class="legend-section-title">Conexões (arestas)</div>
+      <div class="legend-item"><span class="line-sample" style="background:#484f58"></span> url_resolves</div>
+      <div class="legend-item"><span class="line-sample" style="background:#7ee787"></span> model_usage</div>
+      <div class="legend-item"><span class="line-sample" style="background:#3fb950"></span> method_call</div>
+      <div class="legend-item"><span class="line-sample" style="background:#f0883e"></span> form_usage</div>
+      <div class="legend-item"><span class="line-sample" style="background:#d29922"></span> form_model</div>
+      <div class="legend-item"><span class="line-sample" style="background:#bc8cff"></span> renders</div>
+      <div class="legend-item"><span class="line-sample" style="background:#388bfd"></span> field_definition</div>
+      <div class="legend-item"><span class="line-sample" style="background:#da3633"></span> model_relation (FK/M2M)</div>
+      <div class="legend-item"><span class="line-sample" style="background:#f778ba"></span> admin (register/form/inline)</div>
+
+      <div class="legend-section-title">Navegação</div>
+      <div class="legend-item" style="color:#484f58;font-size:11px">Scroll = zoom</div>
+      <div class="legend-item" style="color:#484f58;font-size:11px">Arrastar fundo = mover tudo</div>
+      <div class="legend-item" style="color:#484f58;font-size:11px">Arrastar nó = fixa posição</div>
+      <div class="legend-item" style="color:#484f58;font-size:11px">Duplo-clique = libera nó</div>
+      <div class="legend-item" style="color:#484f58;font-size:11px">Clique no nó = mostra conexões</div>
+      <div class="legend-item" style="color:#484f58;font-size:11px">Clique de novo = deseleciona</div>
+
+      <div class="legend-section-title">Busca e filtros</div>
+      <div class="legend-item" style="color:#484f58;font-size:11px">Botões acima filtram por tipo</div>
+      <div class="legend-item" style="color:#484f58;font-size:11px">Combine tipos: Models + Forms</div>
+      <div class="legend-item" style="color:#484f58;font-size:11px">Digite para filtrar por nome</div>
+      <div class="legend-item" style="color:#484f58;font-size:11px">Enter = zoom no resultado</div>
+      <div class="legend-item" style="color:#484f58;font-size:11px">Esc = limpar busca</div>
+    </div>
   </div>
   <div class="tooltip" id="tooltip"></div>
   <div class="info" id="info"></div>
   <svg id="svg"></svg>
 </div>
+<script>
+function toggleLegend() {
+  document.getElementById('legend-body').classList.toggle('collapsed');
+  document.getElementById('legend-toggle').classList.toggle('collapsed');
+}
+</script>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
 const DATA = /*__DATA__*/;
@@ -84,6 +116,7 @@ const typeColors = {
   form: '#f0883e',
   template: '#bc8cff',
   url: '#484f58',
+  admin: '#f778ba',
 };
 
 const typeRadius = {
@@ -92,6 +125,7 @@ const typeRadius = {
   form: 6,
   template: 5,
   url: 4,
+  admin: 6,
 };
 
 const edgeColors = {
@@ -102,6 +136,10 @@ const edgeColors = {
   form_model: '#d29922',
   renders: '#bc8cff',
   field_definition: '#388bfd',
+  model_relation: '#da3633',
+  admin_register: '#f778ba',
+  admin_form: '#f778ba',
+  admin_inline: '#f778ba',
 };
 
 const width = window.innerWidth;
@@ -199,32 +237,25 @@ function isLinkConnectedTo(l, nodeId) {
 
 // --- Renderização central ---
 function render() {
-  // Nós conectados ao selecionado (filtrados pelo tipo ativo)
   const connectedVisible = selectedNode ? getConnectedVisible(selectedNode) : null;
+  const isFiltering = !activeFilters.has('all') || searchTerm;
 
-  node.style('opacity', d => {
-    // Nó precisa passar no filtro de tipo + busca
-    if (!isNodeVisible(d)) return 0.05;
-    // Se há seleção, só mostra nós conectados (que também passam no filtro)
-    if (connectedVisible && !connectedVisible.has(d.id)) return 0.08;
-    return 1;
-  });
+  node.style('display', d => isNodeVisible(d) ? null : 'none')
+    .style('opacity', d => {
+      if (connectedVisible && !connectedVisible.has(d.id)) return 0.08;
+      return 1;
+    });
 
-  link.attr('stroke-opacity', l => {
+  link.style('display', l => {
     const srcNode = nodes.find(n => n.id === (l.source.id || l.source));
     const tgtNode = nodes.find(n => n.id === (l.target.id || l.target));
-    if (!srcNode || !tgtNode) return 0.02;
-
-    // Ambos os nós da aresta precisam ser visíveis pelo filtro
-    const srcVisible = isNodeVisible(srcNode);
-    const tgtVisible = isNodeVisible(tgtNode);
-    if (!srcVisible || !tgtVisible) return 0.02;
-
-    // Se há nó selecionado, mostrar apenas arestas conectadas a ele
+    if (!srcNode || !tgtNode) return 'none';
+    if (!isNodeVisible(srcNode) || !isNodeVisible(tgtNode)) return 'none';
+    return null;
+  }).attr('stroke-opacity', l => {
     if (connectedVisible) {
-      return isLinkConnectedTo(l, selectedNode) ? 0.8 : 0.02;
+      return isLinkConnectedTo(l, selectedNode) ? 0.8 : 0.05;
     }
-
     return 0.25;
   });
 }
@@ -266,16 +297,10 @@ node.on('mouseover', (event, d) => {
   // Hover highlight temporário (só se não há nó selecionado)
   if (!selectedNode) {
     const hovered = getConnectedVisible(d.id);
-    node.style('opacity', n => {
-      if (!isNodeVisible(n)) return 0.05;
-      return hovered.has(n.id) ? 1 : 0.08;
-    });
-    link.attr('stroke-opacity', l => {
-      if (!isLinkConnectedTo(l, d.id)) return 0.02;
-      const srcNode = nodes.find(n => n.id === (l.source.id || l.source));
-      const tgtNode = nodes.find(n => n.id === (l.target.id || l.target));
-      return (srcNode && isNodeVisible(srcNode)) && (tgtNode && isNodeVisible(tgtNode)) ? 0.8 : 0.02;
-    });
+    node.filter(n => isNodeVisible(n))
+      .style('opacity', n => hovered.has(n.id) ? 1 : 0.08);
+    link.filter(function() { return this.style.display !== 'none'; })
+      .attr('stroke-opacity', l => isLinkConnectedTo(l, d.id) ? 0.8 : 0.05);
   }
 })
 .on('mousemove', (event) => {
