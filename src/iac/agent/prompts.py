@@ -10,7 +10,10 @@ Dois prompts:
 
 from __future__ import annotations
 
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 from iac.agent.orchestrator import format_context_for_prompt, format_deep_analysis, format_structural_analysis
 
@@ -327,6 +330,20 @@ def parse_investigation_requests(llm_response: str) -> list[dict]:
         target = match.group(1).strip()
         reason = match.group(2).strip() if match.group(2) else ''
 
+        # Limpar: remover () do final e backticks
+        target = target.rstrip('()').strip('`')
+
+        # Tratar formato arquivo:linha (ex: progressao_docente/views.py:1008)
+        if '/' in target and '.py' in target:
+            # É um path de arquivo — ignorar (código da view já está no prompt)
+            logger.debug(f'Pedido ignorado (arquivo): {target}')
+            continue
+
+        # Tratar formato template (ex: app/templates/template.html)
+        if '/templates/' in target or target.endswith('.html'):
+            logger.debug(f'Pedido ignorado (template): {target}')
+            continue
+
         parts = target.split('.')
         if len(parts) >= 4 and parts[1] == 'models':
             # app.models.Model.method
@@ -353,8 +370,17 @@ def parse_investigation_requests(llm_response: str) -> list[dict]:
                 'form': parts[2],
                 'reason': reason,
             })
+        elif len(parts) >= 3:
+            # app.kind.Name.method (ex: comum.models.User.get_vinculo)
+            requests.append({
+                'type': 'method',
+                'app': parts[0],
+                'model': parts[2],
+                'method': parts[-1],
+                'reason': reason,
+            })
         else:
-            # Nome simples — tentar resolver como model
+            # Nome simples — tentar resolver
             requests.append({
                 'type': 'symbol',
                 'name': target,
@@ -442,9 +468,18 @@ def resolve_investigation_requests(
     return '\n'.join(sections)
 
 
-def build_evidence_prompt(evidence: str) -> str:
-    """Prompt 2: LLM recebe código adicional e faz análise completa."""
-    return PROMPT_EVIDENCE.format(evidence=evidence)
+def build_evidence_prompt(evidence: str, view_context: str | None = None) -> str:
+    """Prompt 2: LLM recebe código adicional e faz análise completa.
+
+    Args:
+        evidence: Código dos models/métodos investigados
+        view_context: Código da view (do prompt 1, para não perder contexto)
+    """
+    full_evidence = ''
+    if view_context:
+        full_evidence += view_context + '\n\n---\n\n'
+    full_evidence += evidence
+    return PROMPT_EVIDENCE.format(evidence=full_evidence)
 
 
 # ---------------------------------------------------------------------------

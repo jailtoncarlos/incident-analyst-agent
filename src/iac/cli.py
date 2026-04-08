@@ -76,7 +76,7 @@ def init(base_dir: str, force: bool, stats: bool):
 @click.option('--llm', type=click.Choice(['ollama', 'gemini']), default=None, help='Backend LLM.')
 @click.option('--llm-url', type=str, default=None, help='Endpoint do LLM.')
 @click.option('--llm-key', type=str, default=None, help='API key do LLM.')
-@click.option('--llm-model', type=str, default='qwen2.5:7b', help='Modelo do LLM.')
+@click.option('--llm-model', type=str, default=None, help='Modelo do LLM (default: config.yaml ou qwen2.5:7b).')
 @click.option('--gitlab-token', type=str, envvar='GITLAB_TOKEN', default=None, help='Token GitLab.')
 @click.option('--mode', type=click.Choice(['auto', 'single', 'multi']), default='auto', help='Modo: auto (detecta pelo modelo), single (1 prompt), multi (iterativo).')
 @click.option('--dry-run', is_flag=True, help='Não posta comentários nem aplica labels.')
@@ -121,6 +121,7 @@ def analyze(
         build_analysis_prompt, build_response_prompt, extract_tipo_from_analysis,
         build_investigation_prompt, parse_investigation_requests,
         resolve_investigation_requests, build_evidence_prompt,
+        _strip_context_header,
     )
 
     # Configuração efetiva: config.yaml + CLI args
@@ -258,8 +259,9 @@ def analyze(
                 logger.debug(f'Evidência resolvida:\n{evidence}')
                 click.echo(f'Evidência coletada: {len(evidence)} chars')
 
-                # Enviar evidência + pedir análise final
-                evidence_prompt = build_evidence_prompt(evidence)
+                # Enviar evidência + código da view (para não perder contexto)
+                view_context = _strip_context_header(format_context_for_prompt(result['context']))
+                evidence_prompt = build_evidence_prompt(evidence, view_context=view_context)
                 logger.debug(f'Prompt análise:\n{evidence_prompt}')
                 click.echo(f'Enviando prompt final ao {llm} ({len(evidence_prompt)} chars)...')
                 llm_analysis = _send_llm(evidence_prompt)
