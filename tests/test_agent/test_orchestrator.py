@@ -8,7 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from iac.agent.orchestrator import format_context_for_prompt, investigate
+from iac.agent.orchestrator import (
+    build_structural_analysis,
+    format_context_for_prompt,
+    format_structural_analysis,
+    investigate,
+)
+from iac.analyzer.classifier import classify
 from iac.inspector.django import build_django_structure
 from iac.inspector.graph import build_graph
 
@@ -192,3 +198,76 @@ def test_format_context_has_metadata(django_project):
     prompt = format_context_for_prompt(ctx)
     assert 'Passos:' in prompt
     assert 'Contexto:' in prompt
+
+
+# ---------------------------------------------------------------------------
+# build_structural_analysis
+# ---------------------------------------------------------------------------
+
+
+def test_structural_analysis_has_components(django_project):
+    structure, graph, base_dir = django_project
+    desc = '**View**: loja.views.detalhe_produto\n**URL com erro**: https://x.com/loja/produtos/42/\n**Descrição**: produto não carrega'
+    meta = classify('Erro 1234 - Loja', desc)
+    ctx = investigate(structure, graph, base_dir, url='/loja/produtos/42/')
+    analysis = build_structural_analysis(meta, ctx, structure, graph)
+
+    assert analysis['app'] == 'loja'
+    assert analysis['view'] == 'loja.views.detalhe_produto'
+    assert analysis['file'] is not None
+    assert analysis['origem'] == 'erro-suap'
+    assert analysis['erro_id'] == '1234'
+    assert 'produto não carrega' in (analysis['descricao_usuario'] or '')
+
+
+def test_structural_analysis_models(django_project):
+    structure, graph, base_dir = django_project
+    ctx = investigate(structure, graph, base_dir, url='/loja/produtos/42/')
+    meta = classify('Erro 1 - Loja', '')
+    analysis = build_structural_analysis(meta, ctx, structure, graph)
+
+    model_names = [m.split('.')[-1] for m in analysis['models']]
+    assert 'Produto' in model_names
+
+
+def test_structural_analysis_forms(django_project):
+    structure, graph, base_dir = django_project
+    ctx = investigate(structure, graph, base_dir, url='/loja/produtos/42/')
+    meta = classify('Erro 1 - Loja', '')
+    analysis = build_structural_analysis(meta, ctx, structure, graph)
+
+    form_names = [f.split('.')[-1] for f in analysis['forms']]
+    assert 'ProdutoForm' in form_names
+
+
+def test_structural_analysis_flow(django_project):
+    structure, graph, base_dir = django_project
+    ctx = investigate(structure, graph, base_dir, url='/loja/produtos/42/')
+    meta = classify('Erro 1 - Loja', '')
+    analysis = build_structural_analysis(meta, ctx, structure, graph)
+
+    assert len(analysis['flow']) > 0
+    flow_types = [f['type'] for f in analysis['flow']]
+    assert 'url_resolves' in flow_types
+
+
+def test_structural_analysis_related_models(django_project):
+    structure, graph, base_dir = django_project
+    ctx = investigate(structure, graph, base_dir, url='/loja/produtos/42/')
+    meta = classify('Erro 1 - Loja', '')
+    analysis = build_structural_analysis(meta, ctx, structure, graph)
+
+    related = [m.split('.')[-1] for m in analysis.get('related_models', [])]
+    assert 'Categoria' in related
+
+
+def test_format_structural_analysis(django_project):
+    structure, graph, base_dir = django_project
+    ctx = investigate(structure, graph, base_dir, url='/loja/produtos/42/')
+    meta = classify('Erro 1 - Loja', '')
+    analysis = build_structural_analysis(meta, ctx, structure, graph)
+
+    output = format_structural_analysis(analysis)
+    assert '## Análise estrutural' in output
+    assert 'Fluxo de interação' in output
+    assert 'url_resolves' in output

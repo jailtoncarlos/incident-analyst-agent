@@ -386,3 +386,213 @@ def format_context_for_prompt(ctx: dict) -> str:
                     f'Contexto: {ctx.get("context_chars", 0)} chars*')
 
     return '\n'.join(sections)
+
+
+# ---------------------------------------------------------------------------
+# Análise estrutural — combina classifier + orchestrator + grafo
+# ---------------------------------------------------------------------------
+
+
+def build_structural_analysis(
+    classification: dict,
+    ctx: dict,
+    structure: dict,
+    graph: dict,
+) -> dict:
+    """Constrói análise estrutural completa de um incidente.
+
+    Combina os metadados do classifier com o contexto do orchestrator
+    e o grafo de dependências para produzir uma visão estrutural pronta
+    para exibição e para o LLM.
+
+    Args:
+        classification: Resultado de classifier.classify()
+        ctx: Resultado de orchestrator.investigate()
+        structure: Conteúdo de structure.json
+        graph: Conteúdo de graph.json
+
+    Returns:
+        dict com a análise estrutural completa.
+    """
+    app = ctx.get('app') or classification.get('app')
+    view_name = ctx.get('view_name')
+    view_fqn = f'{app}.views.{view_name}' if app and view_name else None
+
+    analysis = {
+        # Identificação
+        'app': app,
+        'rota': classification.get('url_erro'),
+        'view': view_fqn,
+        'file': ctx.get('view_file'),
+        'line': ctx.get('view_line'),
+        # Metadados do incidente
+        'origem': classification.get('origem'),
+        'erro_id': classification.get('erro_id'),
+        'interessado': classification.get('interessado'),
+        'descricao_usuario': classification.get('descricao_usuario'),
+        'tipo_sugerido': classification.get('tipo_sugerido'),
+        # Componentes envolvidos
+        'models': [],
+        'forms': [],
+        'templates': [],
+        'admin': [],
+        # Fluxo de interação
+        'flow': [],
+    }
+
+    if not view_fqn:
+        return analysis
+
+    # Extrair componentes do grafo a partir da view
+    edges = graph.get('edges', [])
+    for edge in edges:
+        if edge['from'] != view_fqn:
+            continue
+        target = edge['to']
+        etype = edge['type']
+
+        if etype == 'model_usage':
+            if target not in analysis['models']:
+                analysis['models'].append(target)
+        elif etype == 'method_call':
+            # model.method → extrair o model
+            parts = target.rsplit('.', 1)
+            model_fqn = parts[0] if len(parts) > 1 else target
+            if model_fqn not in analysis['models'] and '.models.' in model_fqn:
+                analysis['models'].append(model_fqn)
+        elif etype == 'form_usage':
+            if target not in analysis['forms']:
+                analysis['forms'].append(target)
+        elif etype == 'renders':
+            if target not in analysis['templates']:
+                analysis['templates'].append(target)
+
+    # URLs que resolvem para essa view
+    urls = [e['from'] for e in edges if e['to'] == view_fqn and e['type'] == 'url_resolves']
+
+    # Admin que registra os models envolvidos
+    for model_fqn in analysis['models']:
+        for edge in edges:
+            if edge['to'] == model_fqn and edge['type'] == 'admin_register':
+                if edge['from'] not in analysis['admin']:
+                    analysis['admin'].append(edge['from'])
+
+    # Relações FK/M2M dos models envolvidos (segundo nível)
+    related_models = []
+    for model_fqn in analysis['models']:
+        for edge in edges:
+            if edge['from'] == model_fqn and edge['type'] == 'model_relation':
+                if edge['to'] not in analysis['models'] and edge['to'] not in related_models:
+                    related_models.append(edge['to'])
+
+    # Construir fluxo de interação
+    flow = analysis['flow']
+
+    # URL → View
+    for url in urls:
+        flow.append({'from': url, 'to': view_fqn, 'type': 'url_resolves'})
+
+    # View → Models (usage + method_call)
+    for edge in edges:
+        if edge['from'] == view_fqn and edge['type'] in ('model_usage', 'method_call', 'form_usage', 'renders'):
+            flow.append({'from': view_fqn, 'to': edge['to'], 'type': edge['type']})
+
+    # Form → Model
+    for form_fqn in analysis['forms']:
+        for edge in edges:
+            if edge['from'] == form_fqn and edge['type'] == 'form_model':
+                flow.append({'from': form_fqn, 'to': edge['to'], 'type': 'form_model'})
+
+    # Model → Model (FK)
+    for model_fqn in analysis['models']:
+        for edge in edges:
+            if edge['from'] == model_fqn and edge['type'] == 'model_relation':
+                flow.append({'from': model_fqn, 'to': edge['to'], 'type': 'model_relation'})
+
+    analysis['related_models'] = related_models
+
+    return analysis
+
+
+def format_structural_analysis(analysis: dict) -> str:
+    """Formata a análise estrutural como texto legível.
+
+    Produz um resumo estrutural sem código-fonte — foco em
+    componentes e fluxo de interação.
+    """
+    lines = []
+
+    lines.append('## Análise estrutural\n')
+
+    # Identificação
+    lines.append(f'**App:** `{analysis["app"]}`')
+    if analysis.get('rota'):
+        lines.append(f'**Rota:** {analysis["rota"]}')
+    if analysis.get('view'):
+        lines.append(f'**View:** `{analysis["view"]}`')
+    if analysis.get('file'):
+        lines.append(f'**Arquivo:** `{analysis["file"]}:{analysis.get("line", "?")}`')
+
+    # Metadados do incidente
+    if analysis.get('origem'):
+        lines.append(f'**Origem:** {analysis["origem"]}')
+    if analysis.get('erro_id'):
+        lines.append(f'**Erro ID:** {analysis["erro_id"]}')
+    if analysis.get('interessado'):
+        lines.append(f'**Interessado:** {analysis["interessado"]}')
+    if analysis.get('descricao_usuario'):
+        lines.append(f'**Descrição:** "{analysis["descricao_usuario"]}"')
+
+    # Models
+    if analysis.get('models'):
+        lines.append(f'\n### Models envolvidos\n')
+        for m in analysis['models']:
+            lines.append(f'- `{m}`')
+
+    # Models relacionados (FK)
+    if analysis.get('related_models'):
+        lines.append(f'\n### Models relacionados (FK/M2M)\n')
+        for m in analysis['related_models']:
+            lines.append(f'- `{m}`')
+
+    # Forms
+    if analysis.get('forms'):
+        lines.append(f'\n### Forms envolvidos\n')
+        for f in analysis['forms']:
+            lines.append(f'- `{f}`')
+
+    # Templates
+    if analysis.get('templates'):
+        lines.append(f'\n### Templates\n')
+        for t in analysis['templates']:
+            lines.append(f'- `{t}`')
+
+    # Admin
+    if analysis.get('admin'):
+        lines.append(f'\n### Admin\n')
+        for a in analysis['admin']:
+            lines.append(f'- `{a}`')
+
+    # Fluxo de interação
+    if analysis.get('flow'):
+        lines.append(f'\n### Fluxo de interação\n')
+        lines.append('```')
+        for step in analysis['flow']:
+            short_from = _short_name(step['from'])
+            short_to = _short_name(step['to'])
+            lines.append(f'{short_from} ──[{step["type"]}]──> {short_to}')
+        lines.append('```')
+
+    return '\n'.join(lines)
+
+
+def _short_name(fqn: str) -> str:
+    """Encurta um FQN para exibição no fluxo."""
+    if '/urls:' in fqn:
+        return fqn.split('/urls:')[1]
+    if '/templates/' in fqn:
+        return fqn.split('/templates/')[-1]
+    parts = fqn.split('.')
+    if len(parts) >= 3:
+        return f'{parts[-2]}.{parts[-1]}'
+    return fqn
