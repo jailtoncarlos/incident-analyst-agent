@@ -172,7 +172,7 @@ def localizar_arquivo(symbol: str, structure: dict) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-def ler_funcao(file_path: str, line: int, base_dir: Path, max_lines: int = 80) -> str | None:
+def ler_funcao(file_path: str, line: int, base_dir: Path, max_lines: int = 80, method: str | None = None) -> str | None:
     """Extrai o código-fonte de uma função ou classe a partir de arquivo:linha.
 
     Args:
@@ -180,6 +180,7 @@ def ler_funcao(file_path: str, line: int, base_dir: Path, max_lines: int = 80) -
         line: Número da linha onde a função/classe começa
         base_dir: Diretório raiz do projeto
         max_lines: Máximo de linhas a retornar (evita enviar funções enormes ao LLM)
+        method: Se especificado, busca esse método dentro da classe na linha indicada
 
     Returns:
         String com o código-fonte ou None se não encontrar.
@@ -192,7 +193,6 @@ def ler_funcao(file_path: str, line: int, base_dir: Path, max_lines: int = 80) -
         source = full_path.read_text(encoding='utf-8', errors='replace')
         tree = ast.parse(source, filename=str(full_path))
     except SyntaxError:
-        # Fallback: retornar linhas brutas a partir da linha indicada
         lines = source.splitlines()
         start = max(0, line - 1)
         end = min(len(lines), start + max_lines)
@@ -201,6 +201,18 @@ def ler_funcao(file_path: str, line: int, base_dir: Path, max_lines: int = 80) -
     # Encontrar o nó AST que começa na linha indicada
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.lineno == line:
+            # Se pediu um método específico dentro de uma classe
+            if method and isinstance(node, ast.ClassDef):
+                for child in ast.iter_child_nodes(node):
+                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == method:
+                        end_line = child.end_lineno or (child.lineno + max_lines)
+                        lines = source.splitlines()
+                        start = child.lineno - 1
+                        end = min(end_line, start + max_lines)
+                        return '\n'.join(lines[start:end])
+                # Método não encontrado na classe — retorna a classe
+                return None
+
             end_line = node.end_lineno or (line + max_lines)
             lines = source.splitlines()
             start = line - 1
