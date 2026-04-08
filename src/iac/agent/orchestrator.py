@@ -443,34 +443,59 @@ def build_structural_analysis(
     if not view_fqn:
         return analysis
 
-    # Extrair componentes do grafo a partir da view
     edges = graph.get('edges', [])
-    for edge in edges:
-        if edge['from'] != view_fqn:
-            continue
-        target = edge['to']
-        etype = edge['type']
+    apps = structure.get('apps', {})
 
-        if etype == 'model_usage':
-            if target not in analysis['models']:
-                analysis['models'].append(target)
-        elif etype == 'method_call':
-            # model.method → extrair o model
-            parts = target.rsplit('.', 1)
-            model_fqn = parts[0] if len(parts) > 1 else target
-            if model_fqn not in analysis['models'] and '.models.' in model_fqn:
-                analysis['models'].append(model_fqn)
-        elif etype == 'form_usage':
-            if target not in analysis['forms']:
-                analysis['forms'].append(target)
-        elif etype == 'renders':
-            if target not in analysis['templates']:
-                analysis['templates'].append(target)
+    # Obter dados da view diretamente do structure.json (fonte primária)
+    view_data = apps.get(app, {}).get('views', {}).get(view_name, {})
+    view_calls = view_data.get('calls', [])
+    view_renders = view_data.get('renders', [])
+
+    # Template principal: primeiro render ou nome_da_view.html
+    if view_renders:
+        # Filtrar: o template principal é o que tem o nome da view
+        main_template = None
+        for t in view_renders:
+            base = t.rsplit('/', 1)[-1].replace('.html', '')
+            if base == view_name:
+                main_template = t
+                break
+        if not main_template:
+            main_template = view_renders[0]
+        analysis['templates'].append(f'{app}/templates/{main_template}')
+
+    # Models e Forms: resolver apenas calls que correspondem a componentes conhecidos
+    for call in view_calls:
+        call_head = call.split('.')[0] if '.' in call else call
+
+        # Model usage: calls que começam com maiúscula e existem como model
+        if call_head and call_head[0].isupper():
+            for a_name, a_data in apps.items():
+                if call_head in a_data.get('models', {}):
+                    fqn = f'{a_name}.models.{call_head}'
+                    if fqn not in analysis['models']:
+                        analysis['models'].append(fqn)
+                    break
+                if call_head in a_data.get('forms', {}):
+                    fqn = f'{a_name}.forms.{call_head}'
+                    if fqn not in analysis['forms']:
+                        analysis['forms'].append(fqn)
+                    break
+
+        # Method call: resolver via grafo (mais preciso)
+        if '.' in call:
+            method = call.split('.')[-1]
+            for edge in edges:
+                if edge['from'] == view_fqn and edge['type'] == 'method_call' and edge['to'].endswith(f'.{method}'):
+                    model_fqn = edge['to'].rsplit('.', 1)[0]
+                    if '.models.' in model_fqn and model_fqn not in analysis['models']:
+                        analysis['models'].append(model_fqn)
+                    break
 
     # URLs que resolvem para essa view
     urls = [e['from'] for e in edges if e['to'] == view_fqn and e['type'] == 'url_resolves']
 
-    # Admin que registra os models envolvidos
+    # Admin apenas dos models envolvidos
     for model_fqn in analysis['models']:
         for edge in edges:
             if edge['to'] == model_fqn and edge['type'] == 'admin_register':
@@ -485,25 +510,25 @@ def build_structural_analysis(
                 if edge['to'] not in analysis['models'] and edge['to'] not in related_models:
                     related_models.append(edge['to'])
 
-    # Construir fluxo de interação
+    # Construir fluxo de interação (apenas componentes envolvidos)
     flow = analysis['flow']
 
-    # URL → View
     for url in urls:
         flow.append({'from': url, 'to': view_fqn, 'type': 'url_resolves'})
 
-    # View → Models (usage + method_call)
-    for edge in edges:
-        if edge['from'] == view_fqn and edge['type'] in ('model_usage', 'method_call', 'form_usage', 'renders'):
-            flow.append({'from': view_fqn, 'to': edge['to'], 'type': edge['type']})
+    for model_fqn in analysis['models']:
+        flow.append({'from': view_fqn, 'to': model_fqn, 'type': 'model_usage'})
 
-    # Form → Model
     for form_fqn in analysis['forms']:
+        flow.append({'from': view_fqn, 'to': form_fqn, 'type': 'form_usage'})
+        # Form → Model
         for edge in edges:
             if edge['from'] == form_fqn and edge['type'] == 'form_model':
                 flow.append({'from': form_fqn, 'to': edge['to'], 'type': 'form_model'})
 
-    # Model → Model (FK)
+    for tmpl in analysis['templates']:
+        flow.append({'from': view_fqn, 'to': tmpl, 'type': 'renders'})
+
     for model_fqn in analysis['models']:
         for edge in edges:
             if edge['from'] == model_fqn and edge['type'] == 'model_relation':
