@@ -34,6 +34,63 @@ DEFAULT_MAX_STEPS = 10
 DEFAULT_MAX_CONTEXT_CHARS = 15000
 DEFAULT_MAX_REFS = 6
 
+# Perfis de contexto por tamanho de modelo
+MODEL_PROFILES = {
+    'small': {  # 7B — contexto limitado (~4K tokens úteis)
+        'max_steps': 10,
+        'max_context_chars': 8000,
+        'max_refs': 4,
+        'deep_max_context_chars': 3000,
+        'deep_max_depth': 2,
+        'deep_include_methods': False,  # Só constantes + fields
+    },
+    'medium': {  # 14-32B — contexto moderado (~8K tokens úteis)
+        'max_steps': 12,
+        'max_context_chars': 15000,
+        'max_refs': 6,
+        'deep_max_context_chars': 8000,
+        'deep_max_depth': 2,
+        'deep_include_methods': True,
+    },
+    'large': {  # 70B+ ou APIs (Gemini, GPT) — contexto amplo
+        'max_steps': 15,
+        'max_context_chars': 30000,
+        'max_refs': 8,
+        'deep_max_context_chars': 15000,
+        'deep_max_depth': 3,
+        'deep_include_methods': True,
+    },
+}
+
+
+def get_model_profile(model_name: str | None) -> dict:
+    """Retorna o perfil de contexto baseado no nome do modelo.
+
+    Detecta o tamanho pelo nome (ex: qwen2.5:7b → small, gemini → large).
+    """
+    if not model_name:
+        return MODEL_PROFILES['small']
+
+    name = model_name.lower()
+
+    # APIs externas → large
+    if any(api in name for api in ('gemini', 'gpt', 'claude', 'sonnet', 'opus')):
+        return MODEL_PROFILES['large']
+
+    # Detectar tamanho por padrão :NB no nome
+    import re
+    size_match = re.search(r':?(\d+)[bB]', name)
+    if size_match:
+        size = int(size_match.group(1))
+        if size <= 8:
+            return MODEL_PROFILES['small']
+        if size <= 35:
+            return MODEL_PROFILES['medium']
+        return MODEL_PROFILES['large']
+
+    # Fallback: small
+    return MODEL_PROFILES['small']
+
 
 # ---------------------------------------------------------------------------
 # Ponto de entrada único
@@ -46,17 +103,19 @@ def analyze_issue(
     structure: dict,
     graph: dict,
     base_dir: Path,
-    max_steps: int = DEFAULT_MAX_STEPS,
-    max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
-    max_refs: int = DEFAULT_MAX_REFS,
+    model_name: str | None = None,
+    max_steps: int | None = None,
+    max_context_chars: int | None = None,
+    max_refs: int | None = None,
 ) -> dict:
     """Ponto de entrada único para análise completa de um incidente.
 
-    Encadeia: classifier → orchestrator → análise estrutural.
+    Encadeia: classifier → orchestrator → análise estrutural → análise profunda.
 
-    Entrada: apenas título e descrição da issue.
-    Saída: classificação + código navegado + análise estrutural,
-    incluindo labels_sugeridos para aplicar na issue.
+    O nível de detalhe é ajustado automaticamente pelo perfil do modelo LLM:
+        - small (7B): contexto compacto, sem código de métodos na análise profunda
+        - medium (14-32B): contexto moderado, com métodos
+        - large (70B+/APIs): contexto amplo, 3 níveis de profundidade
 
     Args:
         title: Título da issue
@@ -64,16 +123,25 @@ def analyze_issue(
         structure: Conteúdo de structure.json
         graph: Conteúdo de graph.json
         base_dir: Diretório raiz do projeto
-        max_steps: Orçamento de passos do orchestrator
-        max_context_chars: Limite de código no contexto
-        max_refs: Máximo de referências a seguir
+        model_name: Nome do modelo LLM (para ajustar perfil de contexto)
+        max_steps: Override do orçamento de passos
+        max_context_chars: Override do limite de código
+        max_refs: Override do máximo de referências
 
     Returns:
         dict com:
             classification: metadados extraídos da issue (classifier)
             context: código navegado (orchestrator)
             structural: componentes + fluxo (análise estrutural)
+            deep: models em profundidade (análise profunda)
+            profile: perfil de contexto usado
     """
+    # Perfil de contexto baseado no modelo
+    profile = get_model_profile(model_name)
+    _max_steps = max_steps or profile['max_steps']
+    _max_context_chars = max_context_chars or profile['max_context_chars']
+    _max_refs = max_refs or profile['max_refs']
+
     # 1. Classifier — extrair metadados do título e descrição
     classification = classify(title, description)
 
@@ -86,22 +154,28 @@ def analyze_issue(
         url=url,
         description=description,
         traceback=classification.get('traceback'),
-        max_steps=max_steps,
-        max_context_chars=max_context_chars,
-        max_refs=max_refs,
+        max_steps=_max_steps,
+        max_context_chars=_max_context_chars,
+        max_refs=_max_refs,
     )
 
     # 3. Análise estrutural — combinar classifier + orchestrator + grafo
     structural = build_structural_analysis(classification, ctx, structure, graph)
 
     # 4. Análise profunda — navegar FKs em profundidade
-    deep = deep_investigate(ctx, structure, graph, base_dir)
+    deep = deep_investigate(
+        ctx, structure, graph, base_dir,
+        max_depth=profile['deep_max_depth'],
+        max_context_chars=profile['deep_max_context_chars'],
+        include_methods=profile['deep_include_methods'],
+    )
 
     return {
         'classification': classification,
         'context': ctx,
         'structural': structural,
         'deep': deep,
+        'profile': profile,
     }
 
 
@@ -427,11 +501,12 @@ def deep_investigate(
     base_dir: Path,
     max_depth: int = 2,
     max_context_chars: int = 10000,
+    include_methods: bool = True,
 ) -> list[dict]:
     """Navega FKs em profundidade a partir dos models encontrados pela view.
 
     Para cada model envolvido, segue FKs até max_depth níveis,
-    extraindo fields, methods (com código), constantes de classe.
+    extraindo fields, constantes de classe, e opcionalmente métodos com código.
 
     Args:
         ctx: Resultado de investigate()
@@ -440,6 +515,7 @@ def deep_investigate(
         base_dir: Diretório raiz do projeto
         max_depth: Profundidade máxima de navegação FK
         max_context_chars: Limite de chars de código extraído
+        include_methods: Se True, inclui código dos métodos (modelos médios/grandes)
 
     Returns:
         Lista de dicts representando os models em profundidade.
@@ -483,20 +559,24 @@ def deep_investigate(
             'fk_targets': [],
         }
 
-        # Extrair código dos métodos relevantes
+        # Extrair código dos métodos (se include_methods=True)
         methods_data = model_data.get('methods', {})
-        for method_name, method_info in methods_data.items():
-            if context_chars >= max_context_chars:
-                break
-            method_line = method_info.get('line')
-            if method_line:
-                src = ler_funcao(model_data['file'], method_line, base_dir, max_lines=20)
-                if src:
-                    entry['methods'][method_name] = {
-                        'line': method_line,
-                        'source': src,
-                    }
-                    context_chars += len(src)
+        if not include_methods:
+            # Modo compacto: só lista nomes dos métodos
+            entry['method_names'] = list(methods_data.keys())
+        else:
+            for method_name, method_info in methods_data.items():
+                if context_chars >= max_context_chars:
+                    break
+                method_line = method_info.get('line')
+                if method_line:
+                    src = ler_funcao(model_data['file'], method_line, base_dir, max_lines=20)
+                    if src:
+                        entry['methods'][method_name] = {
+                            'line': method_line,
+                            'source': src,
+                        }
+                        context_chars += len(src)
 
         # Seguir FKs
         for edge in edges:
@@ -548,12 +628,16 @@ def format_deep_analysis(deep_models: list[dict]) -> str:
             fk_names = [f'`{t.split(".")[-1]}`' for t in model['fk_targets']]
             lines.append(f'{indent}**FKs:** {", ".join(fk_names)}')
 
-        if model['methods']:
+        if model.get('methods'):
             lines.append(f'\n{indent}**Métodos:**\n')
             for method_name, method_info in model['methods'].items():
                 lines.append(f'{indent}```python')
                 lines.append(f'{method_info["source"]}')
                 lines.append(f'{indent}```\n')
+        elif model.get('method_names'):
+            methods_str = ', '.join(f'`{m}`' for m in model['method_names'][:10])
+            extra = f' (+{len(model["method_names"]) - 10})' if len(model['method_names']) > 10 else ''
+            lines.append(f'{indent}**Métodos:** {methods_str}{extra}')
 
     return '\n'.join(lines)
 
