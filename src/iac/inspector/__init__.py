@@ -86,9 +86,11 @@ def show_stats(iac_dir: Path) -> None:
         total_forms = sum(len(a.get('forms', {})) for a in apps.values())
         total_urls = sum(len(a.get('urls', [])) for a in apps.values())
         total_templates = sum(len(a.get('templates', [])) for a in apps.values())
+        total_admin = sum(len(a.get('admin', {})) for a in apps.values())
         click.echo(f'Views: {total_views}')
         click.echo(f'Models: {total_models}')
         click.echo(f'Forms: {total_forms}')
+        click.echo(f'Admin: {total_admin}')
         click.echo(f'URLs: {total_urls}')
         click.echo(f'Templates: {total_templates}')
 

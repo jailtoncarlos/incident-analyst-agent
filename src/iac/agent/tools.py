@@ -140,7 +140,7 @@ def localizar_arquivo(symbol: str, structure: dict) -> dict | None:
     if len(parts) == 2:
         app_name, name = parts
         app_data = apps.get(app_name, {})
-        for kind in ('views', 'models', 'forms'):
+        for kind in ('views', 'models', 'forms', 'admin'):
             comp = app_data.get(kind, {}).get(name)
             if comp:
                 return {
@@ -154,7 +154,7 @@ def localizar_arquivo(symbol: str, structure: dict) -> dict | None:
     # Busca global por nome simples
     name = parts[-1]
     for app_name, app_data in apps.items():
-        for kind in ('views', 'models', 'forms'):
+        for kind in ('views', 'models', 'forms', 'admin'):
             comp = app_data.get(kind, {}).get(name)
             if comp:
                 return {
