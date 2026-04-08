@@ -282,6 +282,10 @@ def _parse_python_file(file_path: Path, app_dir: Path) -> dict[str, dict]:
             fk_refs = _extract_fk_references(node)
             if fk_refs:
                 entry['fk_references'] = fk_refs
+            # Extrair constantes de classe (UPPER_CASE = valor)
+            constants = _extract_class_constants(node)
+            if constants:
+                entry['constants'] = constants
             # Extrair Meta.model (para forms)
             meta_model = _extract_meta_model(node)
             if meta_model:
@@ -402,6 +406,22 @@ def _extract_fk_references(node: ast.ClassDef) -> list[str]:
                     elif isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value not in refs:
                         refs.append(arg.value)
     return refs
+
+
+def _extract_class_constants(node: ast.ClassDef) -> dict[str, str]:
+    """Extrai constantes de classe (atributos UPPER_CASE com valor literal)."""
+    constants: dict[str, str] = {}
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.Assign):
+            for target in child.targets:
+                if isinstance(target, ast.Name) and target.id.isupper():
+                    # Só capturar valores literais simples
+                    if isinstance(child.value, ast.Constant):
+                        constants[target.id] = str(child.value.value)
+                    elif isinstance(child.value, ast.Tuple | ast.List):
+                        # Tuplas/listas de constantes — representar como resumo
+                        constants[target.id] = f'({len(child.value.elts)} items)'
+    return constants
 
 
 def _extract_methods(node: ast.ClassDef) -> dict[str, dict]:

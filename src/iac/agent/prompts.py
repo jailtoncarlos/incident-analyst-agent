@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 
-from iac.agent.orchestrator import format_context_for_prompt, format_structural_analysis
+from iac.agent.orchestrator import format_context_for_prompt, format_deep_analysis, format_structural_analysis
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +88,14 @@ def build_analysis_prompt(result: dict) -> str:
     if context_text.strip():
         sections.append('\n---\n')
         sections.append(context_text)
+
+    # Análise profunda (models em profundidade)
+    deep = result.get('deep', [])
+    if deep:
+        deep_text = format_deep_analysis(deep)
+        if deep_text.strip():
+            sections.append('\n---\n')
+            sections.append(deep_text)
 
     # Instruções
     sections.append('\n---\n')

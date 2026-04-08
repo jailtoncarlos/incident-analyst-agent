@@ -247,13 +247,35 @@ def _build_global_method_index(apps: dict) -> dict[str, list[tuple[str, str]]]:
 def _resolve_model(
     name: str, current_app: str, local_models: dict, global_models: dict
 ) -> tuple[str | None, str | None]:
-    """Resolve nome de model: prioriza app atual, depois busca global."""
-    # Intra-app
-    if name in local_models:
-        return current_app, name
+    """Resolve nome de model: prioriza app atual, depois busca global.
 
-    # Inter-app
-    candidates = global_models.get(name, [])
+    Aceita formatos:
+        'Chamado' (nome simples)
+        'centralservicos.Chamado' (app.Model)
+        'centralservicos.models.Chamado' (app.models.Model)
+    """
+    # Normalizar: extrair nome simples do model
+    simple_name = name.rsplit('.', 1)[-1] if '.' in name else name
+
+    # Se tem app qualificado, usar como dica
+    qualified_app = None
+    if '.' in name:
+        parts = name.split('.')
+        qualified_app = parts[0]
+
+    # Intra-app (nome simples)
+    if simple_name in local_models:
+        return current_app, simple_name
+
+    # Inter-app com app qualificado (prioridade)
+    if qualified_app:
+        candidates = global_models.get(simple_name, [])
+        for app, model in candidates:
+            if app == qualified_app:
+                return app, model
+
+    # Inter-app (busca global)
+    candidates = global_models.get(simple_name, [])
     if len(candidates) == 1:
         return candidates[0]
     # Se múltiplos candidatos, sem ambiguidade garantida — não resolve
