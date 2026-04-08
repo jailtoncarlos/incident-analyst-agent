@@ -246,49 +246,65 @@ def analyze(
     llm_analysis = None
     if llm and use_multi:
         # --- MODO MULTI-PROMPT ---
-        click.echo(f'\n[Modo multi-prompt] Passo 1: investigação...')
+        logger.info('[LLM] Modo multi-prompt iniciado')
+
+        # Prompt 1: investigação
         investigation_prompt = build_investigation_prompt(result)
-        logger.debug(f'Prompt investigação:\n{investigation_prompt}')
-        click.echo(f'Enviando prompt ao {llm} ({llm_model}, {len(investigation_prompt)} chars)...')
+        logger.info(f'[LLM] Prompt 1 (investigação): {len(investigation_prompt)} chars → enviando ao {llm} ({llm_model})')
+        logger.debug(f'[LLM] Prompt 1 (investigação) conteúdo:\n{investigation_prompt}')
+        click.echo(f'\n[Modo multi-prompt] Enviando prompt 1 ao {llm} ({llm_model}, {len(investigation_prompt)} chars)...')
 
         investigation_response = _send_llm(investigation_prompt)
-        logger.debug(f'Resposta investigação:\n{investigation_response}')
+        logger.info(f'[LLM] Resposta 1 (investigação): {len(investigation_response or "")} chars')
+        logger.debug(f'[LLM] Resposta 1 (investigação) conteúdo:\n{investigation_response}')
+
         if investigation_response:
-            click.echo('\n--- Passo 1: O que o LLM quer investigar ---\n')
+            click.echo('\n--- Resposta do prompt 1: O que o LLM quer investigar ---\n')
             click.echo(investigation_response)
 
-            # Parsear pedidos
+            # Parsear pedidos e resolver evidência
             requests = parse_investigation_requests(investigation_response)
-            logger.info(f'{len(requests)} pedidos de investigação parseados')
+            logger.info(f'[LLM] {len(requests)} pedidos de investigação parseados')
+            for req in requests:
+                logger.debug(f'[LLM] Pedido: tipo={req["type"]}, {req}')
+
             if requests:
-                click.echo(f'\n[Modo multi-prompt] Passo 2: resolvendo {len(requests)} pedidos...')
                 evidence = resolve_investigation_requests(requests, structure, graph, base)
-                logger.debug(f'Evidência resolvida:\n{evidence}')
+                logger.info(f'[LLM] Evidência resolvida: {len(evidence)} chars')
+                logger.debug(f'[LLM] Evidência resolvida conteúdo:\n{evidence}')
                 click.echo(f'Evidência coletada: {len(evidence)} chars')
 
-                # Enviar evidência + código da view (para não perder contexto)
+                # Prompt 2: análise com evidência + código da view
                 view_context = _strip_context_header(format_context_for_prompt(result['context']))
                 evidence_prompt = build_evidence_prompt(evidence, view_context=view_context)
-                logger.debug(f'Prompt análise:\n{evidence_prompt}')
-                click.echo(f'Enviando prompt final ao {llm} ({len(evidence_prompt)} chars)...')
+                logger.info(f'[LLM] Prompt 2 (análise): {len(evidence_prompt)} chars → enviando ao {llm} ({llm_model})')
+                logger.debug(f'[LLM] Prompt 2 (análise) conteúdo:\n{evidence_prompt}')
+                click.echo(f'Enviando prompt 2 ao {llm} ({len(evidence_prompt)} chars)...')
+
                 llm_analysis = _send_llm(evidence_prompt)
-                logger.debug(f'Resposta análise:\n{llm_analysis}')
+                logger.info(f'[LLM] Resposta 2 (análise): {len(llm_analysis or "")} chars')
+                logger.debug(f'[LLM] Resposta 2 (análise) conteúdo:\n{llm_analysis}')
             else:
-                click.echo('LLM não pediu investigação adicional.')
+                click.echo('LLM não pediu investigação adicional — usando prompt único.')
                 prompt = build_analysis_prompt(result)
-                logger.debug(f'Prompt análise (fallback):\n{prompt}')
+                logger.info(f'[LLM] Prompt único (fallback): {len(prompt)} chars')
+                logger.debug(f'[LLM] Prompt único (fallback) conteúdo:\n{prompt}')
                 llm_analysis = _send_llm(prompt)
-                logger.debug(f'Resposta análise (fallback):\n{llm_analysis}')
+                logger.info(f'[LLM] Resposta (fallback): {len(llm_analysis or "")} chars')
+                logger.debug(f'[LLM] Resposta (fallback) conteúdo:\n{llm_analysis}')
         else:
+            logger.warning('[LLM] Prompt 1 sem resposta')
             click.echo('LLM não respondeu no passo 1.')
 
     elif llm:
         # --- MODO SINGLE-PROMPT ---
         prompt = build_analysis_prompt(result)
-        logger.debug(f'Prompt análise:\n{prompt}')
+        logger.info(f'[LLM] Modo single-prompt: {len(prompt)} chars → enviando ao {llm} ({llm_model})')
+        logger.debug(f'[LLM] Prompt (single) conteúdo:\n{prompt}')
         click.echo(f'\nEnviando prompt ao {llm} ({llm_model}, {len(prompt)} chars)...')
         llm_analysis = _send_llm(prompt)
-        logger.debug(f'Resposta análise:\n{llm_analysis}')
+        logger.info(f'[LLM] Resposta (single): {len(llm_analysis or "")} chars')
+        logger.debug(f'[LLM] Resposta (single) conteúdo:\n{llm_analysis}')
 
     if llm_analysis:
         click.echo('\n--- Análise do LLM ---\n')
@@ -302,19 +318,22 @@ def analyze(
             if tipo not in result['classification']['labels_sugeridos']:
                 result['classification']['labels_sugeridos'].append(tipo)
 
-        logger.info(f'Classificação: tipo={tipo}, labels={result["classification"].get("labels_sugeridos", [])}')
+        logger.info(f'[Resultado] Classificação: tipo={tipo}, labels={result["classification"].get("labels_sugeridos", [])}')
 
-        # Gerar resposta ao usuário (se tem interessado)
+        # Prompt 3: resposta ao usuário
         if result['classification'].get('interessado'):
             response_prompt = build_response_prompt(result, llm_analysis)
-            logger.debug(f'Prompt resposta:\n{response_prompt}')
+            logger.info(f'[LLM] Prompt 3 (resposta ao usuário): {len(response_prompt)} chars → enviando ao {llm} ({llm_model})')
+            logger.debug(f'[LLM] Prompt 3 (resposta) conteúdo:\n{response_prompt}')
             click.echo(f'\nGerando resposta ao usuário...')
             response_text = _send_llm(response_prompt)
-            logger.debug(f'Resposta LLM (resposta):\n{response_text}')
+            logger.info(f'[LLM] Resposta 3 (resposta ao usuário): {len(response_text or "")} chars')
+            logger.debug(f'[LLM] Resposta 3 (resposta) conteúdo:\n{response_text}')
             if response_text:
                 click.echo('\n--- Rascunho de resposta ---\n')
                 click.echo(response_text)
     elif llm:
+        logger.warning('[LLM] Nenhuma resposta do LLM')
         click.echo('LLM não retornou resposta.')
 
     # 5. Labels sugeridos
