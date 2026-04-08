@@ -517,31 +517,37 @@ def build_structural_analysis(
 def format_structural_analysis(analysis: dict) -> str:
     """Formata a análise estrutural como texto legível.
 
-    Produz um resumo estrutural sem código-fonte — foco em
-    componentes e fluxo de interação.
+    Duas seções distintas:
+        1. Dados da issue — extraídos da descrição pelo classifier
+        2. Análise estrutural — obtidos via inspeção do código (.iac/)
     """
     lines = []
 
-    lines.append('## Análise estrutural\n')
+    lines.append('## Dados da issue\n')
+    lines.append('*Extraídos da descrição da issue pelo classifier (sem LLM).*\n')
 
-    # Identificação
-    lines.append(f'**App:** `{analysis["app"]}`')
-    if analysis.get('rota'):
-        lines.append(f'**Rota:** {analysis["rota"]}')
-    if analysis.get('view'):
-        lines.append(f'**View:** `{analysis["view"]}`')
-    if analysis.get('file'):
-        lines.append(f'**Arquivo:** `{analysis["file"]}:{analysis.get("line", "?")}`')
-
-    # Metadados do incidente
     if analysis.get('origem'):
         lines.append(f'**Origem:** {analysis["origem"]}')
     if analysis.get('erro_id'):
         lines.append(f'**Erro ID:** {analysis["erro_id"]}')
+    if analysis.get('rota'):
+        lines.append(f'**URL com erro:** {analysis["rota"]}')
     if analysis.get('interessado'):
         lines.append(f'**Interessado:** {analysis["interessado"]}')
     if analysis.get('descricao_usuario'):
-        lines.append(f'**Descrição:** "{analysis["descricao_usuario"]}"')
+        lines.append(f'**Descrição do usuário:** "{analysis["descricao_usuario"]}"')
+    if analysis.get('tipo_sugerido'):
+        lines.append(f'**Tipo sugerido:** `{analysis["tipo_sugerido"]}`')
+
+    lines.append(f'\n## Análise estrutural\n')
+    lines.append('*Obtida via inspeção do código (`.iac/structure.json` + `.iac/graph.json`).*\n')
+
+    if analysis.get('app'):
+        lines.append(f'**App:** `{analysis["app"]}`')
+    if analysis.get('view'):
+        lines.append(f'**View:** `{analysis["view"]}`')
+    if analysis.get('file'):
+        lines.append(f'**Arquivo:** `{analysis["file"]}:{analysis.get("line", "?")}`')
 
     # Models
     if analysis.get('models'):
