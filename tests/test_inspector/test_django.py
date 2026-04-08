@@ -95,6 +95,7 @@ def test_build_structure_models(tmp_path: Path):
     assert 'nome' in models['Item']['fields']
     assert 'descricao' in models['Item']['fields']
     assert 'desativar' in models['Item']['methods']
+    assert 'line' in models['Item']['methods']['desativar']
 
 
 def test_build_structure_forms(tmp_path: Path):

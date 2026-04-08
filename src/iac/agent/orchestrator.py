@@ -226,8 +226,8 @@ def _extract_view_from_traceback(traceback: str, structure: dict) -> dict | None
 
 def _extract_view_from_description(description: str, structure: dict) -> dict | None:
     """Extrai app e view de uma descrição tentando encontrar URLs ou nomes de view."""
-    # Procurar URLs
-    url_match = re.search(r'https?://[^\s]+(/[^\s?#]+)', description)
+    # Procurar URLs — extrair path completo após o host
+    url_match = re.search(r'https?://[^/\s]+((?:/[^\s?#]*)+)', description)
     if url_match:
         rota = resolver_rota(url_match.group(1), structure)
         if rota:
