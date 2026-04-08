@@ -163,13 +163,22 @@ def analyze_issue(
         max_refs=_max_refs,
     )
     logger.info(f'Orchestrator: {ctx.get("app")}.views.{ctx.get("view_name")} — {len(ctx.get("calls", []))} calls, {len(ctx.get("references", []))} refs, {ctx.get("steps_used")} passos')
+    logger.debug(f'Orchestrator view_source: {len(ctx.get("view_source", ""))} chars ({ctx.get("view_file")}:{ctx.get("view_line")})')
     logger.debug(f'Orchestrator calls: {ctx.get("calls", [])}')
     for r in ctx.get('references', []):
-        logger.debug(f'  ref: {r["call"]} → {r["key"]} ({r["file"]}:{r["line"]})')
+        logger.debug(f'Orchestrator ref: {r["call"]} → {r["key"]} ({r["file"]}:{r["line"]}, {len(r.get("source", "") or "")} chars)')
 
     # 3. Análise estrutural — combinar classifier + orchestrator + grafo
     structural = build_structural_analysis(classification, ctx, structure, graph)
     logger.info(f'Structural: {len(structural.get("models", []))} models, {len(structural.get("forms", []))} forms, {len(structural.get("templates", []))} templates, {len(structural.get("flow", []))} passos no fluxo')
+    for m in structural.get('models', []):
+        logger.debug(f'Structural model: {m}')
+    for f in structural.get('forms', []):
+        logger.debug(f'Structural form: {f}')
+    for t in structural.get('templates', []):
+        logger.debug(f'Structural template: {t}')
+    for step in structural.get('flow', []):
+        logger.debug(f'Structural fluxo: {step["from"]} --[{step["type"]}]--> {step["to"]}')
 
     # 4. Análise profunda — navegar FKs em profundidade
     deep = deep_investigate(
@@ -180,7 +189,7 @@ def analyze_issue(
     )
     logger.info(f'Deep: {len(deep)} models em profundidade')
     for m in deep:
-        logger.debug(f'  depth={m["depth"]}: {m["fqn"]} — {len(m.get("fields", []))} fields, {len(m.get("constants", {}))} constantes')
+        logger.debug(f'Deep depth={m["depth"]}: {m["fqn"]} — {len(m.get("fields", []))} fields, {len(m.get("constants", {}))} constantes, fk={m.get("fk_targets", [])}')
 
     return {
         'classification': classification,

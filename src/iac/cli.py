@@ -28,15 +28,19 @@ logger = logging.getLogger('iac.cli')
 
 @click.group()
 @click.version_option(version=__version__, prog_name='iac')
-@click.option('--verbose', '-v', is_flag=True, help='Ativar logs detalhados (DEBUG).')
+@click.option('--verbose', '-v', is_flag=True, help='Ativar logs detalhados (DEBUG) no terminal.')
 def main(verbose: bool):
     """Incident Analyst Agent — análise técnica de incidentes de software."""
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s %(levelname)s %(name)s: %(message)s',
-        datefmt='%H:%M:%S',
-    )
+    # Terminal: INFO por default, DEBUG com -v
+    console_level = logging.DEBUG if verbose else logging.INFO
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(console_level)
+    console_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s', datefmt='%H:%M:%S'))
+
+    # Root logger em DEBUG (o FileHandler no analyze vai receber tudo)
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    root.addHandler(console_handler)
 
 
 @main.command()
@@ -109,13 +113,16 @@ def analyze(
 
     from iac.config.settings import load_graph, load_structure, get_effective_config
 
-    # Adicionar FileHandler em .iac/logs/iac.log
+    # FileHandler em .iac/logs/iac.log — sempre DEBUG completo
     log_dir = iac_dir / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
     file_handler = logging.FileHandler(log_dir / 'iac.log', encoding='utf-8')
     file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s', datefmt='%H:%M:%S'))
-    file_handler.setLevel(logging.DEBUG)  # Arquivo sempre recebe DEBUG
-    logging.getLogger().addHandler(file_handler)
+    file_handler.setLevel(logging.DEBUG)
+    root_logger = logging.getLogger()
+    root_logger.addHandler(file_handler)
+    # Root logger precisa estar em DEBUG para o FileHandler receber tudo
+    root_logger.setLevel(logging.DEBUG)
     from iac.agent.orchestrator import analyze_issue, format_structural_analysis, format_context_for_prompt, get_model_profile
     from iac.agent.prompts import (
         build_analysis_prompt, build_response_prompt, extract_tipo_from_analysis,
