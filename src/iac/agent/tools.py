@@ -284,6 +284,7 @@ def seguir_referencia(call_name: str, from_app: str, structure: dict, graph: dic
                     t_model = target_parts[2]
                     model_data = apps.get(t_app, {}).get('models', {}).get(t_model, {})
                     if model_data:
+                        method_info = model_data.get('methods', {}).get(tail, {})
                         return {
                             'app': t_app,
                             'kind': 'models',
@@ -291,6 +292,7 @@ def seguir_referencia(call_name: str, from_app: str, structure: dict, graph: dic
                             'method': tail,
                             'file': model_data.get('file', ''),
                             'line': model_data.get('line', 0),
+                            'method_line': method_info.get('line'),
                         }
 
     # 2. Tentar resolver como model (intra-app, depois global)

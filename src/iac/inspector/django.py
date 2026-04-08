@@ -403,14 +403,14 @@ def _extract_fk_references(node: ast.ClassDef) -> list[str]:
     return refs
 
 
-def _extract_methods(node: ast.ClassDef) -> list[str]:
-    """Extrai nomes de métodos de uma classe."""
-    methods: list[str] = []
+def _extract_methods(node: ast.ClassDef) -> dict[str, dict]:
+    """Extrai métodos de uma classe com número da linha."""
+    methods: dict[str, dict] = {}
     for child in ast.iter_child_nodes(node):
         if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef) and (
             not child.name.startswith('_') or child.name in ('__str__', '__repr__')
         ):
-            methods.append(child.name)
+            methods[child.name] = {'line': child.lineno}
     return methods
 
 

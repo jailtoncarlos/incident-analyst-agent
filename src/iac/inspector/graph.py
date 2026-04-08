@@ -232,10 +232,10 @@ def _build_global_method_index(apps: dict) -> dict[str, list[tuple[str, str]]]:
     index: dict[str, list[tuple[str, str]]] = {}
     for app_name, app_data in apps.items():
         for model_name, model_data in app_data.get('models', {}).items():
-            for method in model_data.get('methods', []):
-                if method not in index:
-                    index[method] = []
-                index[method].append((app_name, model_name))
+            for method_name in model_data.get('methods', {}):
+                if method_name not in index:
+                    index[method_name] = []
+                index[method_name].append((app_name, model_name))
     return index
 
 
@@ -266,7 +266,7 @@ def _resolve_method(
     """Resolve nome de método para model.method: prioriza app atual."""
     # Intra-app
     for m_name, m_data in local_models.items():
-        if method in m_data.get('methods', []):
+        if method in m_data.get('methods', {}):
             return current_app, m_name
 
     # Inter-app (só se não ambíguo)

@@ -142,6 +142,7 @@ def investigate(
         if any(r['key'] == ref_key for r in ctx['references']):
             continue
 
+        method_line = ref.get('method_line')
         ref_entry = {
             'key': ref_key,
             'call': call,
@@ -150,14 +151,19 @@ def investigate(
             'name': ref['name'],
             'method': ref.get('method'),
             'file': ref['file'],
-            'line': ref['line'],
+            'line': method_line or ref['line'],
             'source': None,
         }
 
         # Ler código da referência se ainda temos orçamento
         if context_chars < max_context_chars and steps < max_steps:
             steps += 1
-            src = ler_funcao(ref['file'], ref['line'], base_dir, max_lines=40, method=ref.get('method'))
+            if method_line:
+                # Linha do método conhecida — ler diretamente
+                src = ler_funcao(ref['file'], method_line, base_dir, max_lines=40)
+            else:
+                # Fallback: buscar método dentro da classe via AST
+                src = ler_funcao(ref['file'], ref['line'], base_dir, max_lines=40, method=ref.get('method'))
             if src:
                 ref_entry['source'] = src
                 context_chars += len(src)

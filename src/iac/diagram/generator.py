@@ -119,7 +119,7 @@ def generate_app_detail_data(iac_dir: Path, app_name: str) -> dict:
                 'file': data.get('file', ''),
                 'line': data.get('line', 0),
                 'fields': data.get('fields', []),
-                'methods': data.get('methods', []),
+                'methods': list(data.get('methods', {})),
             }
         )
         node_ids.add(node_id)
