@@ -415,7 +415,12 @@ function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
 function dragended(event, d) { if (!event.active) simulation.alphaTarget(0); /* fx/fy mantidos: nó fica fixo onde foi solto */ }
 
 // Duplo-clique libera o nó fixado
-node.on('dblclick', (event, d) => { d.fx = null; d.fy = null; simulation.alphaTarget(0.1).restart(); });
+node.on('dblclick', (event, d) => {
+  d.fx = null;
+  d.fy = null;
+  simulation.alphaTarget(0.3).restart();
+  setTimeout(() => simulation.alphaTarget(0), 300);
+});
 </script>
 </body>
 </html>
