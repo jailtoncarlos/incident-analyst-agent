@@ -146,8 +146,7 @@ def analyze_issue(
 
     # 1. Classifier — extrair metadados do título e descrição
     classification = classify(title, description)
-    logger.info(f'Classifier: origem={classification["origem"]}, app={classification.get("app")}, interessado={bool(classification.get("interessado"))}')
-    logger.debug(f'Classifier: {classification}')
+    logger.debug(f'Classifier resultado: {classification}')
 
     # 2. Orchestrator — navegar código via .iac/
     url = _extract_path_from_url(classification.get('url_erro'))
