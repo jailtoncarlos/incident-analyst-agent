@@ -104,13 +104,27 @@ def analyze(
         click.echo('Nenhuma inspeção encontrada. Execute `iac init` primeiro.')
         sys.exit(1)
 
-    from iac.config.settings import load_graph, load_structure
+    from iac.config.settings import load_graph, load_structure, get_effective_config
     from iac.agent.orchestrator import analyze_issue, format_structural_analysis, format_context_for_prompt, get_model_profile
     from iac.agent.prompts import (
         build_analysis_prompt, build_response_prompt, extract_tipo_from_analysis,
         build_investigation_prompt, parse_investigation_requests,
         resolve_investigation_requests, build_evidence_prompt,
     )
+
+    # Configuração efetiva: config.yaml + CLI args
+    cfg = get_effective_config(iac_dir, {
+        'llm': llm, 'llm_model': llm_model, 'llm_url': llm_url, 'llm_key': llm_key,
+        'gitlab_token': gitlab_token, 'mode': mode,
+    })
+
+    # Aplicar config (CLI args já sobrescreveram)
+    llm = llm or cfg['llm'].get('backend')
+    llm_model = cfg['llm']['model']
+    llm_url = llm_url or cfg['llm'].get('url')
+    llm_key = llm_key or cfg['llm'].get('key')
+    gitlab_token = gitlab_token or cfg['gitlab'].get('token')
+    mode = cfg['analyze'].get('mode', mode)
 
     structure = load_structure(iac_dir)
     graph = load_graph(iac_dir)
@@ -127,13 +141,14 @@ def analyze(
             click.echo(f'URL não reconhecida: {issue_url}')
             sys.exit(1)
 
-        gitlab_url, project_path, issue_id = parsed
-        if not gitlab_token:
-            click.echo('Token GitLab necessário. Use --gitlab-token ou GITLAB_TOKEN.')
+        gitlab_url_parsed, project_path, issue_id = parsed
+        token = gitlab_token
+        if not token:
+            click.echo('Token GitLab necessário. Use --gitlab-token, GITLAB_TOKEN ou config.yaml.')
             sys.exit(1)
 
         click.echo(f'Buscando issue {issue_id} no GitLab...')
-        gl = __import__('gitlab').Gitlab(gitlab_url, private_token=gitlab_token)
+        gl = __import__('gitlab').Gitlab(gitlab_url_parsed, private_token=token)
         gl.auth()
         try:
             project = gl.projects.get(project_path)
@@ -141,7 +156,7 @@ def analyze(
             click.echo(f'Projeto {project_path} não encontrado.')
             sys.exit(1)
 
-        gitlab_client = GitLabClient(gitlab_url, gitlab_token, project.id)
+        gitlab_client = GitLabClient(gitlab_url_parsed, token, project.id)
         issue_data = gitlab_client.get_issue(issue_id)
         title = issue_data['title']
         description = issue_data['description']
@@ -154,14 +169,14 @@ def analyze(
         description = ''
 
     # 2. Análise completa
-    click.echo('Analisando...')
+    click.echo(f'Analisando (modelo: {llm_model})...')
     result = analyze_issue(
         title=title,
         description=description,
         structure=structure,
         graph=graph,
         base_dir=base,
-        model_name=llm_model if llm else None,
+        model_name=llm_model,
     )
 
     # 3. Exibir análise estrutural
@@ -278,6 +293,46 @@ def analyze(
         click.echo('\n--post requer --issue-url com --gitlab-token.')
 
     click.echo('\nAnálise concluída.')
+
+
+@main.command('config')
+@click.option('--base-dir', type=click.Path(exists=True), default='.', help='Diretório raiz do projeto.')
+@click.option('--set', 'set_values', multiple=True, help='Definir valor: seção.chave=valor (ex: llm.model=qwen2.5-coder:7b)')
+@click.option('--show', is_flag=True, help='Exibir configuração atual.')
+def config_cmd(base_dir: str, set_values: tuple, show: bool):
+    """Gerencia configuração do projeto (.iac/config.yaml)."""
+    base = Path(base_dir).resolve()
+    iac_dir = base / IAC_DIR
+
+    if not iac_dir.exists():
+        click.echo('Nenhuma inspeção encontrada. Execute `iac init` primeiro.')
+        sys.exit(1)
+
+    from iac.config.settings import load_user_config, save_user_config
+
+    config = load_user_config(iac_dir)
+
+    if set_values:
+        for item in set_values:
+            if '=' not in item:
+                click.echo(f'Formato inválido: {item}. Use seção.chave=valor')
+                continue
+            key, value = item.split('=', 1)
+            parts = key.split('.')
+            if len(parts) == 2:
+                section, field = parts
+                if section not in config:
+                    config[section] = {}
+                config[section][field] = value
+                click.echo(f'{section}.{field} = {value}')
+            else:
+                click.echo(f'Formato inválido: {item}. Use seção.chave=valor')
+
+        save_user_config(iac_dir, config)
+
+    if show or not set_values:
+        import yaml
+        click.echo(yaml.dump(config, default_flow_style=False, allow_unicode=True))
 
 
 @main.command()
