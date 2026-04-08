@@ -179,6 +179,17 @@ def analyze(
     if not description:
         description = ''
 
+    # Log dos argumentos de entrada
+    logger.info(f'=== iac analyze iniciado ===')
+    logger.info(f'Base dir: {base}')
+    logger.info(f'Issue URL: {issue_url or "(não informado)"}')
+    logger.info(f'Título: {title or "(não informado)"}')
+    logger.info(f'Descrição: {description[:150] + "..." if len(description) > 150 else description or "(não informado)"}')
+    logger.info(f'LLM: backend={llm or "(não informado)"}, modelo={llm_model}, url={llm_url or "(config)"}')
+    logger.info(f'Modo: {mode}')
+    if issue_id:
+        logger.info(f'GitLab issue: {issue_id}')
+
     # 2. Análise completa
     click.echo(f'Analisando (modelo: {llm_model})...')
     result = analyze_issue(
