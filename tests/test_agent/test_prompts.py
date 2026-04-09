@@ -118,20 +118,23 @@ def test_analysis_prompt_has_instructions():
 # ---------------------------------------------------------------------------
 
 
-def test_response_prompt_no_bug():
+def test_response_prompt_has_orientations():
     result = _make_result()
     analysis = 'CLASSIFICAÇÃO: tipo::configuracao\nOrientação ao responsável.'
     prompt = build_response_prompt(result, analysis)
-    assert 'NÃO se trata de erro de código' in prompt
     assert 'João Silva' in prompt
+    assert 'Prezado(a)' in prompt
+    assert 'tipo::configuracao' in prompt
+    assert 'Orientação ao responsável' in prompt
 
 
-def test_response_prompt_bug():
+def test_response_prompt_has_analysis():
     result = _make_result()
     analysis = 'CLASSIFICAÇÃO: tipo::bug\nErro no código.'
     prompt = build_response_prompt(result, analysis)
-    assert 'É um bug de código' in prompt
     assert 'João Silva' in prompt
+    assert 'Erro no código' in prompt
+    assert 'NUNCA culpe' in prompt
 
 
 # ---------------------------------------------------------------------------
