@@ -25,6 +25,7 @@ BASE_DIR="."
 MODELS=""
 ISSUE_URL=""
 MODES="single multi loop"
+BACKEND=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -32,6 +33,7 @@ while [[ $# -gt 0 ]]; do
         --models) MODELS="$2"; shift 2 ;;
         --issue-url) ISSUE_URL="$2"; shift 2 ;;
         --modes) MODES="$2"; shift 2 ;;
+        --backend) BACKEND="$2"; shift 2 ;;
         *) echo "Argumento desconhecido: $1"; exit 1 ;;
     esac
 done
@@ -59,8 +61,10 @@ if [[ ! -d "$IAC_DIR" ]]; then
     exit 1
 fi
 
-# Detectar backend do .env
-BACKEND=$(grep -E "^IAC_LLM_BACKEND=" "$IAC_DIR/.env" 2>/dev/null | cut -d= -f2 || echo "groq")
+# Detectar backend do .env (se não informado via --backend)
+if [[ -z "$BACKEND" ]]; then
+    BACKEND=$(grep -E "^IAC_LLM_BACKEND=" "$IAC_DIR/.env" 2>/dev/null | cut -d= -f2 || echo "groq")
+fi
 
 # ---------------------------------------------------------------------------
 # Funções
