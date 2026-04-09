@@ -72,18 +72,7 @@ def classify(title: str, description: str, labels: list[str] | None = None) -> d
     """Classifica um incidente a partir do título, descrição e labels.
 
     Returns:
-        dict com:
-            origem: 'erro-suap' | 'sentry' | 'reporte-manual'
-            app: str | None
-            view: str | None
-            url_erro: str | None
-            interessado: str | None
-            erro_id: str | None
-            descricao_usuario: str | None
-            sentry_url: str | None
-            traceback: str | None
-            tipo_sugerido: str | None
-            labels_sugeridos: list[str]
+        dict compatível com Classification model.
     """
     labels = labels or []
     result = {
