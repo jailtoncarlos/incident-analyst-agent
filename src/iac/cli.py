@@ -86,7 +86,7 @@ def init(base_dir: str, force: bool, stats: bool):
 @click.option('--llm-key', type=str, default=None, help='API key do LLM.')
 @click.option('--llm-model', type=str, default=None, help='Modelo do LLM (default: config.yaml ou qwen2.5:7b).')
 @click.option('--gitlab-token', type=str, envvar='GITLAB_TOKEN', default=None, help='Token GitLab.')
-@click.option('--mode', type=click.Choice(['auto', 'single', 'multi']), default='auto', help='Modo: auto (detecta pelo modelo), single (1 prompt), multi (iterativo).')
+@click.option('--mode', type=click.Choice(['auto', 'single', 'multi', 'loop']), default='auto', help='Modo: auto, single (1 prompt), multi (3 prompts fixos), loop (iterativo, LLM decide).')
 @click.option('--dry-run', is_flag=True, help='Não posta comentários nem aplica labels.')
 @click.option('--post', is_flag=True, help='Postar análise como comentário na issue.')
 def analyze(
@@ -127,7 +127,7 @@ def analyze(
     root_logger.addHandler(file_handler)
     # Root logger precisa estar em DEBUG para o FileHandler receber tudo
     root_logger.setLevel(logging.DEBUG)
-    from iac.agent.orchestrator import analyze_issue, format_structural_analysis, get_model_profile
+    from iac.agent.orchestrator import analyze_issue, format_structural_analysis
     from iac.agent.prompts import extract_tipo_from_analysis
 
     # Configuração efetiva: config.yaml + CLI args
@@ -212,21 +212,31 @@ def analyze(
     click.echo(structural_text)
 
     # 4. Determinar modo e executar LLM
-    from iac.agent.orchestrator import MODEL_PROFILES
+    from iac.agent.loop import run_loop
     from iac.agent.runner import run_multi, run_response, run_single
 
+    effective_mode = mode
     if mode == 'auto' and llm:
-        profile = get_model_profile(llm_model)
-        use_multi = any(profile is v for k, v in MODEL_PROFILES.items() if k == 'small')
-    elif mode == 'multi':
-        use_multi = True
-    else:
-        use_multi = False
+        # auto: loop para todos os perfis (substitui multi)
+        effective_mode = 'loop'
 
     llm_analysis = None
-    if llm and use_multi:
+    loop_result = None
+
+    if llm and effective_mode == 'loop':
+        click.echo(f'\n[Modo loop] Análise interativa com {llm} ({llm_model})...')
+        loop_result = run_loop(result, structure, graph, base, llm, llm_model, llm_url, llm_key)
+        llm_analysis = loop_result.get('analysis')
+        if loop_result.get('alteracoes'):
+            click.echo(f'\n--- Alterações de código sugeridas ({len(loop_result["alteracoes"])}) ---\n')
+            for alt in loop_result['alteracoes']:
+                click.echo(alt)
+                click.echo('')
+
+    elif llm and effective_mode == 'multi':
         click.echo(f'\n[Modo multi-prompt] Enviando ao {llm} ({llm_model})...')
         llm_analysis = run_multi(result, structure, graph, base, llm, llm_model, llm_url, llm_key)
+
     elif llm:
         click.echo(f'\nEnviando prompt ao {llm} ({llm_model})...')
         llm_analysis = run_single(result, llm, llm_model, llm_url, llm_key)
@@ -235,7 +245,7 @@ def analyze(
         click.echo('\n--- Análise do LLM ---\n')
         click.echo(llm_analysis)
 
-        tipo = extract_tipo_from_analysis(llm_analysis)
+        tipo = loop_result.get('tipo') if loop_result else extract_tipo_from_analysis(llm_analysis)
         if tipo:
             click.echo(f'\nClassificação: {tipo}')
             result['classification']['tipo_sugerido'] = tipo
