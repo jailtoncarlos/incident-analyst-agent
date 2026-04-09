@@ -57,11 +57,11 @@ def seguir_referencia(call_name: str, from_app: str, structure: dict, graph: dic
     head = parts[0]
     tail = parts[-1] if len(parts) > 1 else None
 
-    # 1. Tentar resolver como method_call no grafo
+    # 1. Tentar resolver como method_call no grafo (prioriza from_app)
     if tail:
+        candidates = []
         for edge in graph.get('edges', []):
             if edge['type'] == 'method_call' and edge['to'].endswith(f'.{tail}'):
-                # Ex: centralservicos.models.Chamado.get_permissoes
                 target_parts = edge['to'].split('.')
                 if len(target_parts) >= 4:
                     t_app = target_parts[0]
@@ -69,15 +69,20 @@ def seguir_referencia(call_name: str, from_app: str, structure: dict, graph: dic
                     model_data = apps.get(t_app, {}).get('models', {}).get(t_model, {})
                     if model_data:
                         method_info = model_data.get('methods', {}).get(tail, {})
-                        return {
-                            'app': t_app,
-                            'kind': 'models',
-                            'name': t_model,
-                            'method': tail,
-                            'file': model_data.get('file', ''),
-                            'line': model_data.get('line', 0),
-                            'method_line': method_info.get('line'),
-                        }
+                        candidates.append((t_app, t_model, model_data, method_info))
+        # Priorizar: mesmo app primeiro
+        candidates.sort(key=lambda c: (0 if c[0] == from_app else 1))
+        if candidates:
+            t_app, t_model, model_data, method_info = candidates[0]
+            return {
+                'app': t_app,
+                'kind': 'models',
+                'name': t_model,
+                'method': tail,
+                'file': model_data.get('file', ''),
+                'line': model_data.get('line', 0),
+                'method_line': method_info.get('line'),
+            }
 
     # 2. Tentar resolver como model (intra-app, depois global)
     search_name = head if head[0].isupper() else (tail or head)

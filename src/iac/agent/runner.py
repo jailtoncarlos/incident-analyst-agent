@@ -7,6 +7,7 @@ Encapsula a lógica de envio de prompts e processamento de respostas.
 from __future__ import annotations
 
 import logging
+import time
 
 from iac.agent.format import format_context_for_prompt
 from iac.agent.prompts import (
@@ -35,17 +36,21 @@ def send_to_llm(prompt: str, llm: str, llm_model: str, llm_url: str | None, llm_
     Returns:
         Texto da resposta ou None.
     """
+    t0 = time.time()
+    result = None
     if llm == 'ollama':
         from iac.integrations import ollama
         url = llm_url or 'http://localhost:11434/v1/chat/completions'
-        return ollama.chat(prompt, url=url, model=llm_model, api_key=llm_key)
+        result = ollama.chat(prompt, url=url, model=llm_model, api_key=llm_key)
     elif llm == 'gemini':
         from iac.integrations import gemini
         if not llm_url or not llm_key:
             logger.warning('Gemini requer llm_url e llm_key.')
             return None
-        return gemini.chat(prompt, url=llm_url, api_key=llm_key)
-    return None
+        result = gemini.chat(prompt, url=llm_url, api_key=llm_key)
+    elapsed = time.time() - t0
+    logger.info(f'[LLM] send_to_llm: {len(result or "")} chars em {elapsed:.1f}s')
+    return result
 
 
 def run_single(result: dict, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> str | None:
@@ -117,8 +122,20 @@ def run_multi(result: dict, structure: dict, graph: dict, base_dir, llm: str, ll
     logger.info(f'[LLM] Evidência resolvida: {len(evidence)} chars')
     logger.debug(f'[LLM] Evidência resolvida conteúdo:\n{evidence}')
 
-    # Prompt 2: análise com evidência + código da view
+    # Prompt 2: análise com evidência + código da view + constantes do deep
     view_context = _strip_context_header(format_context_for_prompt(result['context']))
+
+    # Incluir constantes dos models de nível 1 do deep (alto valor, baixo custo)
+    deep_summary = ''
+    for m in result.get('deep', []):
+        if m.get('depth', 0) <= 1 and m.get('constants'):
+            deep_summary += f'\n### Constantes de `{m["fqn"]}`\n'
+            for name, value in m['constants'].items():
+                deep_summary += f'- `{name} = {value}`\n'
+
+    if deep_summary:
+        evidence += '\n---\n' + deep_summary
+
     evidence_prompt = build_evidence_prompt(evidence, view_context=view_context)
     logger.info(f'[LLM] Prompt 2 (análise): {len(evidence_prompt)} chars → enviando ao {llm} ({llm_model})')
     logger.debug(f'[LLM] Prompt 2 (análise) conteúdo:\n{evidence_prompt}')

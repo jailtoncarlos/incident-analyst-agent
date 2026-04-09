@@ -122,6 +122,7 @@ def investigate(
         steps += 1
         ref = seguir_referencia(call, ctx['app'], structure, graph)
         if not ref:
+            logger.debug(f'[Passo {steps}] seguir_referencia: {call} → não resolvido')
             continue
 
         ref_key = f'{ref["app"]}.{ref["kind"]}.{ref["name"]}'
