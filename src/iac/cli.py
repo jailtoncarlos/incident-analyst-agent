@@ -143,7 +143,7 @@ def analyze(
     # Root logger precisa estar em DEBUG para o FileHandler receber tudo
     root_logger.setLevel(logging.DEBUG)
     from iac.agent.orchestrator import analyze_issue, format_structural_analysis
-    from iac.agent.prompts import extract_tipo_from_analysis
+    from iac.agent.prompts import extract_classificacao
 
     # Configuração efetiva: config.yaml + CLI args
     cfg = get_effective_config(iac_dir, {
@@ -280,14 +280,22 @@ def analyze(
         click.echo('\n--- Análise do LLM ---\n')
         click.echo(llm_analysis)
 
-        tipo = loop_result.get('tipo') if loop_result else extract_tipo_from_analysis(llm_analysis)
+        classificacao = extract_classificacao(llm_analysis)
+        tipo = loop_result.get('tipo') if loop_result else classificacao['classificacao']
+        subtipo = classificacao.get('subclassificacao')
+
         if tipo:
             click.echo(f'\nClassificação: {tipo}')
             result['classification']['tipo_sugerido'] = tipo
             if tipo not in result['classification']['labels_sugeridos']:
                 result['classification']['labels_sugeridos'].append(tipo)
+        if subtipo:
+            click.echo(f'Subclassificação: {subtipo}')
+            result['classification']['subtipo_sugerido'] = subtipo
+            if subtipo not in result['classification']['labels_sugeridos']:
+                result['classification']['labels_sugeridos'].append(subtipo)
 
-        logger.info(f'[Resultado] Classificação: tipo={tipo}, labels={result["classification"].get("labels_sugeridos", [])}')
+        logger.info(f'[Resultado] Classificação: tipo={tipo}, subtipo={subtipo}, labels={result["classification"].get("labels_sugeridos", [])}')
 
         if result['classification'].get('interessado'):
             click.echo('\nGerando resposta ao usuário...')
