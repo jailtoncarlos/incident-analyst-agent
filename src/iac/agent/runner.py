@@ -16,6 +16,7 @@ from iac.agent.prompts import (
     build_evidence_prompt,
     build_investigation_prompt,
     build_response_prompt,
+    extract_tipo_from_analysis,
     parse_investigation_requests,
     resolve_investigation_requests,
 )
@@ -144,6 +145,102 @@ def run_multi(result: dict, structure: dict, graph: dict, base_dir, llm: str, ll
     logger.info(f'[LLM] Resposta 2 (análise): {len(analysis or "")} chars')
     logger.debug(f'[LLM] Resposta 2 (análise) conteúdo:\n{analysis}')
     return analysis
+
+
+def run_auto(result: dict, structure: dict, graph: dict, base_dir, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> dict:
+    """Executa single como fast-path, escala para loop se incerto.
+
+    Args:
+        result: Dict retornado por analyze_issue().
+        structure: Mapa estrutural (.iac/structure.json).
+        graph: Grafo de dependências (.iac/graph.json).
+        base_dir: Diretório raiz do projeto.
+        llm: Backend LLM.
+        llm_model: Nome do modelo.
+        llm_url: Endpoint da API.
+        llm_key: API key.
+
+    Returns:
+        Dict com analysis, tipo, alteracoes, mode_used.
+    """
+    from iac.agent.loop import run_loop
+
+    # Passo 1: single como Prompt 0
+    logger.info('[auto] Passo 1: single como fast-path')
+    single_analysis = run_single(result, llm, llm_model, llm_url, llm_key)
+
+    if not single_analysis:
+        logger.warning('[auto] Single sem resposta — fallback para loop')
+        loop_result = run_loop(result, structure, graph, base_dir, llm, llm_model, llm_url, llm_key)
+        return {**loop_result, 'mode_used': 'loop'}
+
+    # Passo 2: avaliar confiança
+    confidence = _confidence_score(single_analysis)
+    logger.info(f'[auto] Confiança do single: {confidence}/4')
+
+    if confidence >= 3:
+        logger.info('[auto] Resposta confiante — aceitar single')
+        tipo = extract_tipo_from_analysis(single_analysis)
+        return {
+            'analysis': single_analysis,
+            'tipo': tipo,
+            'alteracoes': [],
+            'iterations': 0,
+            'mode_used': 'single',
+        }
+
+    # Passo 3: escalar para loop com histórico do single
+    logger.info(f'[auto] Resposta incerta (confiança={confidence}/4) — escalando para loop')
+    initial_history = (
+        f'**Prompt 0 — SINGLE (análise inicial)**\n\n'
+        f'{single_analysis}\n\n'
+        f'⚠️ A análise acima pode estar incompleta ou imprecisa. '
+        f'Revise, investigue mais se necessário, ou confirme com CLASSIFICAR.'
+    )
+    loop_result = run_loop(
+        result, structure, graph, base_dir,
+        llm, llm_model, llm_url, llm_key,
+        initial_history=initial_history,
+    )
+    return {**loop_result, 'mode_used': 'single+loop'}
+
+
+def _confidence_score(analysis: str) -> int:
+    """Avalia confiança da resposta do single (0-4).
+
+    Critérios:
+        1. Tem classificação tipo:: ?
+        2. Tem evidência [ENCONTRADO] ?
+        3. Mencionou constantes/campos específicos ?
+        4. Sugeriu resolução concreta ?
+
+    Args:
+        analysis: Texto da análise do LLM.
+
+    Returns:
+        Score de 0 a 4.
+    """
+    score = 0
+
+    # 1. Tem classificação
+    if extract_tipo_from_analysis(analysis):
+        score += 1
+
+    # 2. Tem evidência encontrada
+    if '[ENCONTRADO]' in analysis:
+        score += 1
+
+    # 3. Mencionou constantes/campos específicos (não genérico)
+    specific_markers = ['TEMPO_', 'data_', 'situacao', 'status', 'prazo', 'periodo']
+    if any(m in analysis for m in specific_markers):
+        score += 1
+
+    # 4. Sugeriu resolução concreta
+    concrete_markers = ['diff', 'ANTES:', 'DEPOIS:', 'Admin >', 'Acessar', 'verificar no banco', 'orientar']
+    if any(m.lower() in analysis.lower() for m in concrete_markers):
+        score += 1
+
+    return score
 
 
 def run_response(result: dict, llm_analysis: str, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> str | None:

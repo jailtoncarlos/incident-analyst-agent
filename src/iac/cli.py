@@ -216,21 +216,26 @@ def analyze(
     # 4. Determinar modo e executar LLM
     from iac.agent.loop import run_loop
     from iac.agent.orchestrator import MODEL_PROFILES, get_model_profile
-    from iac.agent.runner import run_multi, run_response, run_single
+    from iac.agent.runner import run_auto, run_multi, run_response, run_single
 
     effective_mode = mode
     if mode == 'auto' and llm:
         profile = get_model_profile(llm_model)
-        # small (7B): multi é mais confiável (acertou tipo::prazo-expirado)
-        # medium/large (14B+): loop tem potencial com evidência focal
         is_small = any(profile is v for k, v in MODEL_PROFILES.items() if k == 'small')
-        effective_mode = 'multi' if is_small else 'loop'
+        # small (7B): multi estável. medium/large (14B+): auto (single → loop se incerto)
+        effective_mode = 'multi' if is_small else 'auto'
         logger.info(f'[auto] Perfil {"small" if is_small else "medium/large"} → modo {effective_mode}')
 
     llm_analysis = None
     loop_result = None
 
-    if llm and effective_mode == 'loop':
+    if llm and effective_mode == 'auto':
+        click.echo(f'\n[Modo auto] Single como fast-path + loop se incerto ({llm} {llm_model})...')
+        loop_result = run_auto(result, structure, graph, base, llm, llm_model, llm_url, llm_key)
+        mode_used = loop_result.get('mode_used', '?')
+        click.echo(f'[auto] Modo usado: {mode_used}')
+
+    elif llm and effective_mode == 'loop':
         click.echo(f'\n[Modo loop] Análise interativa com {llm} ({llm_model})...')
         loop_result = run_loop(result, structure, graph, base, llm, llm_model, llm_url, llm_key)
         llm_analysis = loop_result.get('analysis')

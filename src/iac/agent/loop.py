@@ -91,6 +91,7 @@ def run_loop(
     llm_url: str | None,
     llm_key: str | None,
     max_iterations: int = 4,
+    initial_history: str | None = None,
 ) -> dict:
     """Executa loop interativo de análise.
 
@@ -107,6 +108,7 @@ def run_loop(
         llm_url: Endpoint da API.
         llm_key: API key.
         max_iterations: Máximo de iterações do loop.
+        initial_history: Histórico inicial (ex: análise do single como Prompt 0).
 
     Returns:
         Dict com analysis (texto), tipo, alteracoes, iterations.
@@ -128,8 +130,10 @@ def run_loop(
         base_context += '\n---\n' + deep_constants
 
     history_entries = []
+    if initial_history:
+        history_entries.append(initial_history)
     alteracoes = []
-    investigated = set()  # Track o que já foi investigado
+    investigated = set()
     final_analysis = None
     final_tipo = None
     consecutive_investigate = 0
