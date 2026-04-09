@@ -89,7 +89,11 @@ src/iac/
 │
 ├── inspector/                 # Camada 1 — Inspeção estrutural
 │   ├── detector.py            # Detecta framework (Django/Flask/FastAPI)
-│   ├── django.py              # Parser AST Django (views, models, forms, admin, urls)
+│   ├── django.py              # Façade: build_django_structure() (P2)
+│   ├── django_discovery.py    # Descoberta de apps e INSTALLED_APPS
+│   ├── django_parser.py       # Parsing AST de módulos Python
+│   ├── django_urls.py         # Parsing de urls.py e admin.py
+│   ├── django_renders.py      # Enriquecimento de renders de templates
 │   ├── structure.py           # Gera structure.json
 │   └── graph.py               # Gera graph.json (arestas tipadas)
 │
@@ -99,7 +103,9 @@ src/iac/
 │   ├── deep.py                # Camada 4: FKs em profundidade (P2)
 │   ├── structural.py          # Camada 3: componentes + fluxo (P2)
 │   ├── format.py              # Formatação de contexto para prompts (P2)
-│   ├── tools.py               # 7 ferramentas de navegação
+│   ├── tools.py               # Façade: 7 ferramentas de navegação (P2)
+│   ├── tools_navigation.py    # resolver_rota, localizar_arquivo, ler_funcao
+│   ├── tools_inspection.py    # extrair_chamadas, seguir_referencia, listar_imports
 │   ├── runner.py              # Runner LLM: single/multi-prompt (P2)
 │   └── prompts/               # Pacote de prompts (P2)
 │       ├── analysis.py        # Prompt single-prompt (análise completa)
@@ -208,6 +214,7 @@ Formato por camada, gravado em `.iac/logs/iac.log` (DEBUG) e terminal (INFO):
 
 - **Lint:** `ruff` com 11 categorias de regras (E, F, W, I, N, UP, S, B, SIM, PIE, D)
 - **Docstrings:** Google convention obrigatória (`pydocstyle`)
+- **Tamanho de módulo:** `pylint` com `max-module-lines=400` (`.pylintrc`)
 - **Testes:** 106 testes unitários + fixtures determinísticos
-- **CI:** GitHub Actions (lint + testes em cada push)
-- **Pre-commit:** `ruff-format` + `ruff check`
+- **CI:** GitHub Actions (ruff + pylint + pytest em cada push)
+- **Pre-commit:** `ruff-format` + `ruff check` + `pylint` (tamanho de módulo)

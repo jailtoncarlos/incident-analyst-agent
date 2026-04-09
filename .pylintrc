@@ -1,0 +1,8 @@
+[MASTER]
+# Usar apenas a regra de tamanho de módulo
+disable=all
+enable=C0302
+
+[FORMAT]
+# Princípio 2 — Módulos < 400 linhas
+max-module-lines=400
