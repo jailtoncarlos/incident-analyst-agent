@@ -24,8 +24,8 @@ from pydantic_settings import BaseSettings
 
 
 def _resolve_llm_key() -> str | None:
-    """Resolve API key pela ordem: GROQ_API_KEY → GEMINI_API_KEY → IAC_LLM_KEY."""
-    return os.environ.get('GROQ_API_KEY') or os.environ.get('GEMINI_API_KEY') or os.environ.get('IAC_LLM_KEY')
+    """Resolve API key pela ordem: GROQ_API_KEY → DEEPSEEK_API_KEY → GEMINI_API_KEY → IAC_LLM_KEY."""
+    return os.environ.get('GROQ_API_KEY') or os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('GEMINI_API_KEY') or os.environ.get('IAC_LLM_KEY')
 
 
 def _resolve_gitlab_token() -> str | None:
