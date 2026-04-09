@@ -194,6 +194,26 @@ Detecção automática pelo nome do modelo via `get_model_profile()`.
 | `multi` | Prompt 1 (investigação) → Prompt 2 (análise) → Prompt 3 (resposta) | Modelos pequenos (7B) |
 | `auto` | Seleciona automaticamente pelo perfil | Default |
 
+## Estratégia de prompts
+
+Os prompts usam **orientações**, não templates rígidos — o LLM adapta a resposta ao contexto.
+
+**Classificação flexível:** o LLM classifica com `tipo::nome`. Exemplos comuns: `bug`, `configuracao`, `dados-cadastrais`, `prazo-expirado`, `nao-e-erro`. Pode criar labels novos se nenhum se aplica (ex: `tipo::permissao`).
+
+**Correlação descrição ↔ código:** os prompts orientam o LLM a correlacionar a descrição do usuário com constantes e campos do código (ex: "tempo hábil" → `TEMPO_AVALIACAO = 10`).
+
+**Plano de verificação:** em vez de "plano de simulação" com template fixo, o LLM indica o que verificar no banco e como admin para confirmar a hipótese.
+
+**Fluxo futuro com verificação no banco** ([#44](https://github.com/jailtoncarlos/incident-analyst-agent/issues/44)):
+
+```
+Prompt 1 (investigação)       → LLM pede código
+Prompt 2 (análise parcial)    → LLM analisa + sugere VERIFICAR_BANCO
+  ↓ Simulator (banco mascarado)
+Prompt 3 (análise final)      → LLM recebe resultado + classifica
+Prompt 4 (resposta)           → LLM gera rascunho adaptado ao tipo
+```
+
 ## Logging
 
 Formato por camada, gravado em `.iac/logs/iac.log` (DEBUG) e terminal (INFO):
@@ -204,10 +224,12 @@ Formato por camada, gravado em `.iac/logs/iac.log` (DEBUG) e terminal (INFO):
 [Camada 3] Structural — 2 models, 1 templates, 6 passos no fluxo
 [Camada 4] Deep — 6 models em profundidade
 [LLM] Prompt 1 (investigação): 4041 chars → enviando ao ollama
-[LLM] Resposta 1 (investigação): 726 chars
-[LLM] Prompt 2 (análise): 7501 chars
-[LLM] Resposta 2 (análise): 2466 chars
-[Resultado] Classificação: tipo::bug
+[LLM] send_to_llm: 1014 chars em 114.9s
+[LLM] Resposta 1 (investigação): 1014 chars
+[LLM] Evidência resolvida: 1912 chars
+[LLM] Prompt 2 (análise): 6096 chars
+[LLM] send_to_llm: 2310 chars em 214.5s
+[Resultado] Classificação: tipo::prazo-expirado
 ```
 
 ## Qualidade de código
