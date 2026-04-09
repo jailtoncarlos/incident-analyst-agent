@@ -162,9 +162,10 @@ def resolve_investigation_requests(requests: list[dict], structure: dict, graph:
     for req in requests:
         if req['type'] == 'method':
             fqn = f'{req["app"]}.models.{req["model"]}'
+            model_data = structure.get('apps', {}).get(req['app'], {}).get('models', {}).get(req['model'], {})
             loc = localizar_arquivo(fqn, structure)
-            if loc:
-                model_data = structure.get('apps', {}).get(req['app'], {}).get('models', {}).get(req['model'], {})
+
+            if model_data and loc:
                 method_info = model_data.get('methods', {}).get(req['method'], {})
                 method_line = method_info.get('line')
                 if method_line:
@@ -173,11 +174,26 @@ def resolve_investigation_requests(requests: list[dict], structure: dict, graph:
                         sections.append(f'### `{fqn}.{req["method"]}` ({loc["file"]}:{method_line})\n')
                         sections.append(f'```python\n{src}\n```\n')
                         continue
-                src = ler_funcao(loc['file'], loc['line'], Path(base_dir), method=req['method'], max_lines=30)
-                if src:
-                    sections.append(f'### `{fqn}.{req["method"]}` ({loc["file"]})\n')
-                    sections.append(f'```python\n{src}\n```\n')
+
+                # Fallback: method pode ser um field ou atributo — retornar model com fields + constantes
+                is_field = req['method'] in model_data.get('fields', [])
+                is_attr = req['method'] in ('objects',) or req['method'] in model_data.get('constants', {})
+                if is_field or is_attr or not method_line:
+                    sections.append(f'### `{fqn}` ({loc["file"]}:{loc["line"]})\n')
+                    fields = model_data.get('fields', [])
+                    if fields:
+                        sections.append(f'**Fields:** {", ".join(f"`{f}`" for f in fields[:20])}\n')
+                    constants = model_data.get('constants', {})
+                    if constants:
+                        sections.append('**Constantes:**')
+                        for name, value in constants.items():
+                            sections.append(f'- `{name} = {value}`')
+                        sections.append('')
+                    methods = model_data.get('methods', {})
+                    if methods:
+                        sections.append(f'**Métodos:** {", ".join(f"`{m}`" for m in list(methods.keys())[:15])}\n')
                     continue
+
             sections.append(f'### `{fqn}.{req["method"]}` — não encontrado\n')
 
         elif req['type'] == 'model':

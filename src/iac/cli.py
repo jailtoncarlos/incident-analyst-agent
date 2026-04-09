@@ -42,6 +42,10 @@ def main(verbose: bool):
     root.setLevel(logging.DEBUG)
     root.addHandler(console_handler)
 
+    # Silenciar libs verbosas no log
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    logging.getLogger('gitlab').setLevel(logging.WARNING)
+
 
 @main.command()
 @click.option('--base-dir', type=click.Path(exists=True), default='.', help='Diretório raiz do projeto.')
@@ -164,15 +168,11 @@ def analyze(
             sys.exit(1)
 
         click.echo(f'Buscando issue {issue_id} no GitLab...')
-        gl = __import__('gitlab').Gitlab(gitlab_url_parsed, private_token=token)
-        gl.auth()
         try:
-            project = gl.projects.get(project_path)
+            gitlab_client = GitLabClient(gitlab_url_parsed, token, project_path=project_path)
         except Exception:
             click.echo(f'Projeto {project_path} não encontrado.')
             sys.exit(1)
-
-        gitlab_client = GitLabClient(gitlab_url_parsed, token, project.id)
         issue_data = gitlab_client.get_issue(issue_id)
         title = issue_data['title']
         description = issue_data['description']

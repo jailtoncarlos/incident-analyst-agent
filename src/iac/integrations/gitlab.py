@@ -16,12 +16,18 @@ logger = logging.getLogger(__name__)
 class GitLabClient:
     """Client para interagir com issues do GitLab."""
 
-    def __init__(self, url: str, private_token: str, project_id: int | str):
-        """Inicializa e autentica o client GitLab."""
+    def __init__(self, url: str, private_token: str, project_id: int | str | None = None, project_path: str | None = None):
+        """Inicializa e autentica o client GitLab.
+
+        Aceita project_id (int) ou project_path (str 'group/project').
+        """
         self.gl = gitlab.Gitlab(url, private_token=private_token)
         self.gl.auth()
-        self.project = self.gl.projects.get(int(project_id))
-        logger.info(f'Conectado ao GitLab project {project_id}')
+        if project_path and not project_id:
+            self.project = self.gl.projects.get(project_path)
+        else:
+            self.project = self.gl.projects.get(int(project_id))
+        logger.info(f'Conectado ao GitLab project {self.project.id}')
 
     def get_issue(self, issue_id: int) -> dict:
         """Busca uma issue e retorna como dict com title, description, labels.
