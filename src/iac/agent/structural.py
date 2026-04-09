@@ -16,7 +16,17 @@ def build_structural_analysis(
     structure: dict,
     graph: dict,
 ) -> dict:
-    """Constrói análise estrutural combinando classifier + orchestrator + grafo."""
+    """Constrói análise estrutural combinando classifier + orchestrator + grafo.
+
+    Args:
+        classification: Dict retornado por classify() com metadados da issue.
+        ctx: Contexto de investigação retornado por investigate().
+        structure: Mapa estrutural do projeto (.iac/structure.json).
+        graph: Grafo de dependências (.iac/graph.json).
+
+    Returns:
+        Dict com app, view, models, forms, templates, admin, flow e related_models.
+    """
     app = ctx.get('app') or classification.get('app')
     view_name = ctx.get('view_name')
     view_fqn = f'{app}.views.{view_name}' if app and view_name else None
@@ -125,7 +135,14 @@ def build_structural_analysis(
 
 
 def format_structural_analysis(analysis: dict) -> str:
-    """Formata a análise estrutural como texto legível."""
+    """Formata a análise estrutural como texto legível.
+
+    Args:
+        analysis: Dict retornado por build_structural_analysis().
+
+    Returns:
+        Texto em Markdown com dados da issue e componentes estruturais.
+    """
     lines = []
 
     lines.append('## Dados da issue\n')

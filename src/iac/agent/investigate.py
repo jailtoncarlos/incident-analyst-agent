@@ -36,7 +36,24 @@ def investigate(
     max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
     max_refs: int = DEFAULT_MAX_REFS,
 ) -> dict:
-    """Executa investigação dirigida de um incidente."""
+    """Executa investigação dirigida de um incidente.
+
+    Resolve URL → view, lê código-fonte, extrai chamadas e segue referências.
+
+    Args:
+        structure: Mapa estrutural do projeto (.iac/structure.json).
+        graph: Grafo de dependências (.iac/graph.json).
+        base_dir: Diretório raiz do projeto inspecionado.
+        url: Path da URL com erro (ex: /centralservicos/chamado/123/).
+        description: Descrição completa da issue.
+        traceback: Traceback do erro, se disponível.
+        max_steps: Número máximo de passos de investigação.
+        max_context_chars: Limite total de caracteres de código a coletar.
+        max_refs: Número máximo de referências a seguir.
+
+    Returns:
+        Dict de contexto com app, view, código-fonte, referências e status.
+    """
     ctx = _new_context(url=url, description=description, traceback=traceback)
     steps = 0
     context_chars = 0

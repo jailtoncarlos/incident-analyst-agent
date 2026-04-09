@@ -11,8 +11,12 @@ logger = logging.getLogger(__name__)
 def build_structure(base_dir: Path, config: dict) -> dict:
     """Constrói o mapa estrutural com base no framework detectado.
 
+    Args:
+        base_dir: Diretório raiz do projeto a inspecionar.
+        config: Dict de configuração retornado por detect_framework().
+
     Returns:
-        dict com chave 'apps' contendo o mapa por app/módulo.
+        Dict com chave 'apps' contendo o mapa por app/módulo.
     """
     framework = config.get('framework', 'unknown')
 

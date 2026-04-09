@@ -32,7 +32,16 @@ EXCLUDE_DIRS = {
 
 
 def build_django_structure(base_dir: Path, config: dict) -> dict:
-    """Constrói o mapa estrutural de um projeto Django."""
+    """Constrói o mapa estrutural de um projeto Django.
+
+    Args:
+        base_dir: Diretório raiz do projeto Django.
+        config: Dict de configuração retornado por detect_framework().
+
+    Returns:
+        Dict com chave 'apps' mapeando cada app aos seus views, models,
+        forms, admin, urls e templates.
+    """
     apps = _discover_apps(base_dir, config)
     structure: dict[str, dict] = {}
 
@@ -219,6 +228,7 @@ def _fix_legacy_syntax(source: str) -> str:
     """
 
     def _fix_except(match: re.Match) -> str:
+        """Converte cláusula except Python 2 para tupla Python 3."""
         types_str = match.group(1)
         # Separar por vírgula, preservando nomes qualificados (A.B)
         types = [t.strip() for t in types_str.split(',')]

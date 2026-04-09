@@ -22,7 +22,20 @@ def deep_investigate(
     max_context_chars: int = 10000,
     include_methods: bool = True,
 ) -> list[dict]:
-    """Navega FKs em profundidade a partir dos models da view."""
+    """Navega FKs em profundidade a partir dos models da view.
+
+    Args:
+        ctx: Contexto de investigação retornado por investigate().
+        structure: Mapa estrutural do projeto (.iac/structure.json).
+        graph: Grafo de dependências (.iac/graph.json).
+        base_dir: Diretório raiz do projeto inspecionado.
+        max_depth: Profundidade máxima de navegação via FKs.
+        max_context_chars: Limite de caracteres de código a incluir.
+        include_methods: Se True, inclui código-fonte dos métodos.
+
+    Returns:
+        Lista de dicts com dados dos models visitados, ordenada por profundidade.
+    """
     apps = structure.get('apps', {})
     edges = graph.get('edges', [])
     context_chars = 0
@@ -40,6 +53,7 @@ def deep_investigate(
     result = []
 
     def _explore(app_name: str, model_name: str, depth: int):
+        """Visita recursivamente um model e seus FK targets."""
         nonlocal context_chars
         fqn = f'{app_name}.models.{model_name}'
         if fqn in visited or depth > max_depth:
@@ -88,7 +102,14 @@ def deep_investigate(
 
 
 def format_deep_analysis(deep_models: list[dict]) -> str:
-    """Formata a análise profunda como texto para o prompt."""
+    """Formata a análise profunda como texto para o prompt.
+
+    Args:
+        deep_models: Lista de dicts retornada por deep_investigate().
+
+    Returns:
+        Texto em Markdown com os models e seus detalhes por nível de profundidade.
+    """
     if not deep_models:
         return ''
 

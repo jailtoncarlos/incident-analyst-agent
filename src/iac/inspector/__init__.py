@@ -25,8 +25,15 @@ logger = logging.getLogger(__name__)
 def inspect_project(base_dir: Path, force: bool = False) -> dict:
     """Executa inspeção completa do projeto.
 
+    Encadeia: detect_framework → build_structure → build_graph e persiste
+    os artefatos no diretório .iac/.
+
+    Args:
+        base_dir: Diretório raiz do projeto a inspecionar.
+        force: Se True, remove o .iac/ existente antes de inspecionar.
+
     Returns:
-        dict com 'summary' (str) e 'config' (dict)
+        Dict com 'summary' (str descritivo) e 'config' (dict do framework).
     """
     iac_dir = base_dir / IAC_DIR
 
@@ -67,7 +74,11 @@ def inspect_project(base_dir: Path, force: bool = False) -> dict:
 
 
 def show_stats(iac_dir: Path) -> None:
-    """Exibe estatísticas da inspeção existente."""
+    """Exibe estatísticas da inspeção existente.
+
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+    """
     config_file = iac_dir / 'project.json'
     structure_file = iac_dir / 'structure.json'
     graph_file = iac_dir / 'graph.json'

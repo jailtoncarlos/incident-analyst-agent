@@ -71,8 +71,14 @@ _APP_ALIASES: dict[str, str] = {
 def classify(title: str, description: str, labels: list[str] | None = None) -> dict:
     """Classifica um incidente a partir do título, descrição e labels.
 
+    Args:
+        title: Título da issue.
+        description: Descrição completa da issue.
+        labels: Labels já aplicados à issue, se houver.
+
     Returns:
-        dict compatível com Classification model.
+        Dict com origem, app, view, url_erro, interessado, erro_id,
+        descricao_usuario, sentry_url, traceback, tipo_sugerido e labels_sugeridos.
     """
     labels = labels or []
     result = {

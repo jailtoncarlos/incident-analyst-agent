@@ -15,8 +15,11 @@ logger = logging.getLogger(__name__)
 def generate_overview_data(iac_dir: Path) -> dict:
     """Gera dados agregados por app para o overview.
 
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+
     Returns:
-        dict com 'nodes' (apps) e 'links' (conexões entre apps).
+        Dict com 'nodes' (apps) e 'links' (conexões entre apps).
     """
     structure = load_structure(iac_dir)
     graph = load_graph(iac_dir)
@@ -80,8 +83,12 @@ def generate_overview_data(iac_dir: Path) -> dict:
 def generate_app_detail_data(iac_dir: Path, app_name: str) -> dict:
     """Gera dados detalhados de um app para o diagrama D3.js.
 
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+        app_name: Nome do app Django a detalhar.
+
     Returns:
-        dict com 'nodes' (componentes) e 'links' (arestas internas).
+        Dict com 'nodes' (componentes), 'links' (arestas internas) e 'app_name'.
     """
     structure = load_structure(iac_dir)
     graph = load_graph(iac_dir)
@@ -223,7 +230,13 @@ def _extract_app(fqn: str) -> str | None:
 
 
 def write_html(output_path: Path, template_name: str, data: dict) -> None:
-    """Renderiza template HTML com dados JSON embutidos."""
+    """Renderiza template HTML com dados JSON embutidos.
+
+    Args:
+        output_path: Caminho do arquivo HTML a gerar.
+        template_name: Nome do template em iac/diagram/templates/.
+        data: Dict com os dados a embutir no placeholder /*__DATA__*/.
+    """
     templates_dir = Path(__file__).parent / 'templates'
     template_path = templates_dir / template_name
 

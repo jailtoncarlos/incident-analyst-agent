@@ -12,8 +12,11 @@ logger = logging.getLogger(__name__)
 def detect_framework(base_dir: Path) -> dict:
     """Detecta o framework e configurações básicas do projeto.
 
+    Args:
+        base_dir: Diretório raiz do projeto a inspecionar.
+
     Returns:
-        dict com: framework, python_version, settings_module, base_dir
+        Dict com framework, python_version, settings_module e base_dir.
     """
     config = {
         'framework': 'unknown',

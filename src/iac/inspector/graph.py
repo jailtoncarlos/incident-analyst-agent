@@ -13,8 +13,11 @@ def build_graph(structure: dict) -> dict:
     Suporta arestas intra-app e inter-app. Um índice global de models
     e forms é construído para resolver referências cruzadas entre apps.
 
+    Args:
+        structure: Mapa estrutural retornado por build_structure().
+
     Returns:
-        dict com 'edges': lista de arestas tipadas.
+        Dict com 'edges': lista de arestas tipadas (from, to, type).
     """
     edges: list[dict] = []
     apps = structure.get('apps', {})

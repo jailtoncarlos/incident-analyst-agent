@@ -7,7 +7,14 @@ from __future__ import annotations
 
 
 def format_context_for_prompt(ctx: dict) -> str:
-    """Formata o contexto de investigação como texto para o prompt do LLM."""
+    """Formata o contexto de investigação como texto para o prompt do LLM.
+
+    Args:
+        ctx: Contexto de investigação retornado por investigate().
+
+    Returns:
+        Texto em Markdown com app, view, código-fonte e traceback.
+    """
     sections = []
 
     if ctx.get('app') and ctx.get('view_name'):
@@ -45,7 +52,15 @@ def format_context_for_prompt(ctx: dict) -> str:
 
 
 def fmt_dict(d: dict, indent: int = 2) -> str:
-    """Formata um dict para log em múltiplas linhas."""
+    """Formata um dict para log em múltiplas linhas.
+
+    Args:
+        d: Dicionário a formatar.
+        indent: Número de espaços de indentação por linha.
+
+    Returns:
+        String com cada par chave/valor em uma linha, omitindo valores vazios.
+    """
     lines = []
     prefix = ' ' * indent
     for k, v in d.items():

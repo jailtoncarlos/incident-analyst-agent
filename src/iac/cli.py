@@ -232,6 +232,7 @@ def analyze(
 
     # Helper para enviar ao LLM
     def _send_llm(prompt_text):
+        """Envia prompt ao backend LLM configurado e retorna a resposta."""
         if llm == 'ollama':
             from iac.integrations import ollama
             _url = llm_url or 'http://localhost:11434/v1/chat/completions'

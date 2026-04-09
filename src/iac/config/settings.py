@@ -35,7 +35,14 @@ DEFAULT_CONFIG = {
 
 
 def load_config(iac_dir: Path) -> dict:
-    """Carrega a configuração do projeto a partir do diretório .iac."""
+    """Carrega a configuração do projeto a partir do diretório .iac.
+
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+
+    Returns:
+        Dict com a configuração do projeto ou {} se não existir.
+    """
     project_file = iac_dir / PROJECT_FILE
     if not project_file.exists():
         return {}
@@ -43,7 +50,12 @@ def load_config(iac_dir: Path) -> dict:
 
 
 def save_config(iac_dir: Path, config: dict) -> None:
-    """Salva a configuração do projeto no diretório .iac."""
+    """Salva a configuração do projeto no diretório .iac.
+
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+        config: Dict de configuração a persistir.
+    """
     iac_dir.mkdir(parents=True, exist_ok=True)
     project_file = iac_dir / PROJECT_FILE
     project_file.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding='utf-8')
@@ -51,7 +63,14 @@ def save_config(iac_dir: Path, config: dict) -> None:
 
 
 def load_structure(iac_dir: Path) -> dict:
-    """Carrega o mapa estrutural do projeto."""
+    """Carrega o mapa estrutural do projeto.
+
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+
+    Returns:
+        Dict com o mapa estrutural ou {} se não existir.
+    """
     structure_file = iac_dir / STRUCTURE_FILE
     if not structure_file.exists():
         return {}
@@ -59,7 +78,12 @@ def load_structure(iac_dir: Path) -> dict:
 
 
 def save_structure(iac_dir: Path, structure: dict) -> None:
-    """Salva o mapa estrutural do projeto."""
+    """Salva o mapa estrutural do projeto.
+
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+        structure: Dict com o mapa estrutural a persistir.
+    """
     iac_dir.mkdir(parents=True, exist_ok=True)
     structure_file = iac_dir / STRUCTURE_FILE
     structure_file.write_text(json.dumps(structure, indent=2, ensure_ascii=False), encoding='utf-8')
@@ -67,7 +91,14 @@ def save_structure(iac_dir: Path, structure: dict) -> None:
 
 
 def load_graph(iac_dir: Path) -> dict:
-    """Carrega o grafo de dependências."""
+    """Carrega o grafo de dependências.
+
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+
+    Returns:
+        Dict com 'edges' ou {'edges': []} se não existir.
+    """
     graph_file = iac_dir / GRAPH_FILE
     if not graph_file.exists():
         return {'edges': []}
@@ -75,7 +106,12 @@ def load_graph(iac_dir: Path) -> dict:
 
 
 def save_graph(iac_dir: Path, graph: dict) -> None:
-    """Salva o grafo de dependências."""
+    """Salva o grafo de dependências.
+
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+        graph: Dict com 'edges' a persistir.
+    """
     iac_dir.mkdir(parents=True, exist_ok=True)
     graph_file = iac_dir / GRAPH_FILE
     graph_file.write_text(json.dumps(graph, indent=2, ensure_ascii=False), encoding='utf-8')
@@ -88,7 +124,14 @@ def save_graph(iac_dir: Path, graph: dict) -> None:
 
 
 def load_user_config(iac_dir: Path) -> dict:
-    """Carrega config.yaml do .iac/. Retorna defaults se não existir."""
+    """Carrega config.yaml do .iac/. Retorna defaults se não existir.
+
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+
+    Returns:
+        Dict com configuração efetiva (defaults + valores do usuário mesclados).
+    """
     config_file = iac_dir / CONFIG_FILE
     if not config_file.exists():
         return dict(DEFAULT_CONFIG)
@@ -108,7 +151,12 @@ def load_user_config(iac_dir: Path) -> dict:
 
 
 def save_user_config(iac_dir: Path, config: dict) -> None:
-    """Salva config.yaml no .iac/."""
+    """Salva config.yaml no .iac/.
+
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+        config: Dict de configuração a persistir (valores None são omitidos).
+    """
     iac_dir.mkdir(parents=True, exist_ok=True)
     config_file = iac_dir / CONFIG_FILE
 
@@ -131,6 +179,13 @@ def get_effective_config(iac_dir: Path, cli_args: dict) -> dict:
     """Retorna configuração efetiva: config.yaml + overrides do CLI.
 
     CLI args sobrescrevem config.yaml que sobrescreve defaults.
+
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+        cli_args: Dict com args do CLI (llm, llm_model, llm_url, llm_key, gitlab_token, mode).
+
+    Returns:
+        Dict de configuração com seções llm, gitlab e analyze já mescladas.
     """
     config = load_user_config(iac_dir)
 

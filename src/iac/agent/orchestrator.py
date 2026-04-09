@@ -43,7 +43,14 @@ MODEL_PROFILES = {
 
 
 def get_model_profile(model_name: str | None) -> dict:
-    """Retorna o perfil de contexto baseado no nome do modelo."""
+    """Retorna o perfil de contexto baseado no nome do modelo.
+
+    Args:
+        model_name: Nome do modelo LLM (ex: 'qwen2.5:7b', 'claude-sonnet-4').
+
+    Returns:
+        Dict com limites de steps, context_chars, refs e parâmetros de deep.
+    """
     if not model_name:
         return MODEL_PROFILES['small']
 
@@ -83,6 +90,20 @@ def analyze_issue(
     """Ponto de entrada único para análise completa de um incidente.
 
     Encadeia: classifier → orchestrator → análise estrutural → análise profunda.
+
+    Args:
+        title: Título da issue.
+        description: Descrição completa da issue.
+        structure: Mapa estrutural do projeto (.iac/structure.json).
+        graph: Grafo de dependências (.iac/graph.json).
+        base_dir: Diretório raiz do projeto inspecionado.
+        model_name: Nome do modelo LLM, usado para selecionar o perfil de contexto.
+        max_steps: Sobrescreve o limite de passos do perfil.
+        max_context_chars: Sobrescreve o limite de contexto do perfil.
+        max_refs: Sobrescreve o limite de referências do perfil.
+
+    Returns:
+        Dict com classification, context, structural, deep e profile.
     """
     profile = get_model_profile(model_name)
     _max_steps = max_steps or profile['max_steps']
