@@ -14,24 +14,38 @@ KNOWN_TIPOS = {
 
 
 def extract_tipo_from_analysis(analysis: str) -> str | None:
-    """Extrai o label tipo::* da resposta do LLM.
+    """Extrai o label de classificação da resposta do LLM.
 
     Procura padrões como::
 
         CLASSIFICAÇÃO: tipo::bug
-        CLASSIFICAÇÃO: tipo::permissao
+        CLASSIFICAÇÃO: bug::tempo_habil
+        **CLASSIFICAR** CLASSIFICAÇÃO: tipo::prazo-expirado
 
-    Aceita labels conhecidos e novos criados pelo LLM.
+    Aceita formatos tipo::nome e outros prefixos (bug::, erro::, etc.).
+    Normaliza para tipo:: quando o prefixo não é tipo.
 
     Args:
         analysis: Texto completo da resposta do LLM.
 
     Returns:
-        Label tipo::* encontrado ou None.
+        Label tipo::* normalizado ou None.
     """
-    match = re.search(r'(tipo::[a-z][a-z0-9-]*)', analysis)
+    # Formato padrão: tipo::nome
+    match = re.search(r'(tipo::[a-z][a-z0-9_-]*)', analysis)
     if match:
         return match.group(1).strip('*').strip('`').strip()
+
+    # Formato alternativo: CLASSIFICAÇÃO: xxx::yyy (normalizar para tipo::)
+    match = re.search(r'CLASSIFICA[CÇ][AÃ]O:\s*(\w+::[\w_-]+)', analysis)
+    if match:
+        label = match.group(1).strip('*').strip('`').strip()
+        # Normalizar: bug::tempo_habil → tipo::tempo-habil
+        if not label.startswith('tipo::'):
+            nome = label.split('::', 1)[1].replace('_', '-')
+            return f'tipo::{nome}'
+        return label
+
     return None
 
 
