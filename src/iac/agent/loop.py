@@ -30,52 +30,55 @@ PROMPT_LOOP = """Você é um engenheiro de software sênior investigando uma iss
 
 ---
 
-Analise o que você já sabe e responda com EXATAMENTE UMA ação.
+Analise o que você já sabe e escolha UMA ação.
+
+## Regras importantes
+- NÃO repita investigações já feitas (veja o histórico acima)
+- Se já tem código + constantes + descrição do usuário, avance para CLASSIFICAR
+- Correlacione a descrição do usuário com constantes do código (ex: "tempo hábil" → TEMPO_AVALIACAO)
+- Se precisa confirmar com dados reais, use VERIFICAR_BANCO (não INVESTIGAR)
 
 ## Ações disponíveis
 
-**Se precisa ver mais código:**
+**INVESTIGAR** — pedir código que ainda não viu:
 ```
 AÇÃO: INVESTIGAR
 INVESTIGAR: app.models.Model.method — motivo
-INVESTIGAR: app.models.Model — motivo (ver fields e constantes)
 ```
 
-**Se precisa verificar dados no banco para confirmar hipótese:**
+**VERIFICAR_BANCO** — confirmar hipótese com dados reais:
 ```
 AÇÃO: VERIFICAR_BANCO
-CONSULTA: Descrição em linguagem natural do que verificar no banco.
-Exemplo: "Buscar DiscenteAptosAvaliacao com matricula=20231124120023, verificar situacao da avaliacao e data_liberacao_avaliacao"
+CONSULTA: descrição do que verificar no banco
 ```
 
-**Se identificou necessidade de alterar código:**
+**ALTERAR_CODIGO** — sugerir correção:
 ```
 AÇÃO: ALTERAR_CODIGO
-ARQUIVO: caminho/do/arquivo.py
-ANTES:
-código atual
-DEPOIS:
-código corrigido
-MOTIVO: explicação da alteração
+ARQUIVO: caminho/arquivo.py
+ANTES: código atual
+DEPOIS: código corrigido
+MOTIVO: explicação
 ```
 
-**Se já tem informação suficiente para concluir:**
+**CLASSIFICAR** — concluir a análise:
 ```
 AÇÃO: CLASSIFICAR
 CLASSIFICAÇÃO: tipo::nome
 
 ### Análise
-Causa raiz, evidências [ENCONTRADO]/[INFERÊNCIA], resolução.
+Causa raiz com [ENCONTRADO] e [INFERÊNCIA].
+
+### Resolução
+O que fazer para resolver.
 
 ### Plano de verificação
-O que verificar no banco e como admin para confirmar.
-```
+O que verificar no banco e como admin.
+```"""
 
-Responda com UMA ação apenas. Correlacione a descrição do usuário com constantes e campos do código."""
+PROMPT_HISTORY_EMPTY = "Esta é a primeira iteração. Analise o código da view, as constantes dos models e a descrição do usuário."
 
-PROMPT_HISTORY_EMPTY = "Esta é a primeira iteração. Analise o código da view e a descrição do usuário."
-
-PROMPT_HISTORY_PREFIX = "Histórico das iterações anteriores:\n\n"
+PROMPT_HISTORY_PREFIX = "## Histórico — o que já foi investigado (NÃO repita)\n\n"
 
 
 def run_loop(
@@ -126,17 +129,28 @@ def run_loop(
 
     history_entries = []
     alteracoes = []
+    investigated = set()  # Track o que já foi investigado
     final_analysis = None
     final_tipo = None
+    consecutive_investigate = 0
 
     for iteration in range(1, max_iterations + 1):
         logger.info(f'[Loop iteração {iteration}/{max_iterations}]')
+
+        # Na última iteração, forçar CLASSIFICAR
+        force_classify = iteration == max_iterations
 
         # Montar histórico
         if not history_entries:
             history = PROMPT_HISTORY_EMPTY
         else:
             history = PROMPT_HISTORY_PREFIX + '\n---\n'.join(history_entries)
+            if investigated:
+                history += f'\n\n**Já investigados:** {", ".join(f"`{m}`" for m in investigated)}'
+
+        # Se forçando classificação, adicionar instrução
+        if force_classify:
+            history += '\n\n⚠️ **Esta é a última iteração. Você DEVE responder com AÇÃO: CLASSIFICAR.**'
 
         # Enviar prompt
         prompt = PROMPT_LOOP.format(context=base_context, history=history)
@@ -162,11 +176,20 @@ def run_loop(
             break
 
         elif action == 'INVESTIGAR':
+            consecutive_investigate += 1
             requests = parse_investigation_requests(response)
-            if requests:
-                evidence = resolve_investigation_requests(requests, structure, graph, base_dir)
-                history_entries.append(f'**Iteração {iteration} — INVESTIGAR**\n\nPedidos: {len(requests)}\n\nResultado:\n{evidence}')
-                logger.info(f'[Loop iteração {iteration}] Evidência: {len(evidence)} chars')
+            # Filtrar pedidos já investigados
+            new_requests = [r for r in requests if _request_key(r) not in investigated]
+            if new_requests:
+                for r in new_requests:
+                    investigated.add(_request_key(r))
+                evidence = resolve_investigation_requests(new_requests, structure, graph, base_dir)
+                history_entries.append(f'**Iteração {iteration} — INVESTIGAR**\n\nPedidos: {len(new_requests)}\n\nResultado:\n{evidence}')
+                logger.info(f'[Loop iteração {iteration}] Evidência: {len(evidence)} chars ({len(new_requests)} novos pedidos)')
+            elif requests:
+                # Todos os pedidos já foram investigados
+                history_entries.append(f'**Iteração {iteration} — INVESTIGAR** (todos já investigados, avance para CLASSIFICAR)')
+                logger.info(f'[Loop iteração {iteration}] Pedidos repetidos — forçando avanço')
             else:
                 history_entries.append(f'**Iteração {iteration} — INVESTIGAR** (sem pedidos parseáveis)')
 
@@ -236,6 +259,17 @@ def _detect_action(response: str) -> str:
         return 'ALTERAR_CODIGO'
 
     return 'DESCONHECIDO'
+
+
+def _request_key(req: dict) -> str:
+    """Gera chave única para um pedido de investigação."""
+    if req.get('type') == 'method':
+        return f'{req.get("app")}.{req.get("model")}.{req.get("method")}'
+    if req.get('type') == 'model':
+        return f'{req.get("app")}.{req.get("model")}'
+    if req.get('type') == 'form':
+        return f'{req.get("app")}.{req.get("form")}'
+    return req.get('name', str(req))
 
 
 def _extract_consulta(response: str) -> str:
