@@ -82,12 +82,12 @@ def init(base_dir: str, force: bool, stats: bool):
 @click.option('--title', type=str, default=None, help='Título do incidente.')
 @click.option('--description', type=str, default=None, help='Descrição do incidente.')
 @click.option('--base-dir', type=click.Path(exists=True), default='.', help='Diretório raiz do projeto.')
-@click.option('--llm', type=click.Choice(['ollama', 'groq', 'gemini']), default=None, help='Backend LLM.')
-@click.option('--llm-url', type=str, default=None, help='Endpoint do LLM.')
-@click.option('--llm-key', type=str, default=None, help='API key do LLM.')
-@click.option('--llm-model', type=str, default=None, help='Modelo do LLM (default: config.yaml ou qwen2.5:7b).')
-@click.option('--gitlab-token', type=str, envvar='GITLAB_TOKEN', default=None, help='Token GitLab.')
-@click.option('--mode', type=click.Choice(['auto', 'single', 'multi', 'loop']), default='auto', help='Modo: auto, single (1 prompt), multi (3 prompts fixos), loop (iterativo, LLM decide).')
+@click.option('--llm', type=click.Choice(['ollama', 'groq', 'gemini']), envvar='IAC_LLM_BACKEND', default=None, help='Backend LLM (env: IAC_LLM_BACKEND).')
+@click.option('--llm-url', type=str, envvar='IAC_LLM_URL', default=None, help='Endpoint do LLM (env: IAC_LLM_URL).')
+@click.option('--llm-key', type=str, default=None, help='API key do LLM (env: GROQ_API_KEY, GEMINI_API_KEY).')
+@click.option('--llm-model', type=str, envvar='IAC_LLM_MODEL', default=None, help='Modelo do LLM (env: IAC_LLM_MODEL).')
+@click.option('--gitlab-token', type=str, envvar='GITLAB_TOKEN', default=None, help='Token GitLab (env: GITLAB_TOKEN).')
+@click.option('--mode', type=click.Choice(['auto', 'single', 'multi', 'loop']), envvar='IAC_ANALYZE_MODE', default=None, help='Modo (env: IAC_ANALYZE_MODE).')
 @click.option('--env-file', type=click.Path(), default=None, help='Caminho para .env (default: .iac/.env).')
 @click.option('--dry-run', is_flag=True, help='Não posta comentários nem aplica labels.')
 @click.option('--post', is_flag=True, help='Postar análise como comentário na issue.')
@@ -151,15 +151,13 @@ def analyze(
         'gitlab_token': gitlab_token, 'mode': mode,
     })
 
-    # Aplicar config — llm só é ativado se passado via --llm
-    # config.yaml define o default quando --llm é passado, não ativa automaticamente
+    # Resolução: CLI args (já com envvar via click) → config.yaml → defaults
+    llm = llm or cfg['llm'].get('backend')
     llm_model = llm_model or cfg['llm'].get('model') or 'qwen2.5:7b'
-    if llm and not llm_model:
-        llm_model = cfg['llm']['model']
     llm_url = llm_url or cfg['llm'].get('url')
     llm_key = llm_key or cfg['llm'].get('key') or os.environ.get('GROQ_API_KEY') or os.environ.get('GEMINI_API_KEY')
     gitlab_token = gitlab_token or cfg['gitlab'].get('token') or os.environ.get('GITLAB_TOKEN')
-    mode = cfg['analyze'].get('mode', mode)
+    mode = mode or cfg['analyze'].get('mode') or 'auto'
 
     structure = load_structure(iac_dir)
     graph = load_graph(iac_dir)
