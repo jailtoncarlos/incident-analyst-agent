@@ -82,9 +82,9 @@ def chat(
             logger.error(f'Requisição ao Groq falhou: {e}')
             return None
 
-        if response.status_code == 429:
+        if response.status_code in (429, 413):
             wait = _parse_retry_after(response.text)
-            logger.warning(f'[Groq] Rate limit (429) — aguardando {wait}s (tentativa {attempt}/{DEFAULT_MAX_RETRIES})')
+            logger.warning(f'[Groq] Rate limit ({response.status_code}) — aguardando {wait}s (tentativa {attempt}/{DEFAULT_MAX_RETRIES})')
             time.sleep(wait)
             continue
 
@@ -104,8 +104,11 @@ def chat(
 
 
 def _parse_retry_after(error_text: str) -> float:
-    """Extrai tempo de espera da mensagem de erro 429 do Groq."""
+    """Extrai tempo de espera da mensagem de erro 429/413 do Groq."""
     match = re.search(r'try again in (\d+\.?\d*)s', error_text, re.IGNORECASE)
     if match:
         return float(match.group(1)) + 1.0
+    # 413 (request too large) — tokens/min reseta em ~60s
+    if 'Request too large' in error_text or '413' in error_text:
+        return 60.0
     return 30.0
