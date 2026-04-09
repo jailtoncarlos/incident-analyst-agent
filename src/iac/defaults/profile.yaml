@@ -1,22 +1,68 @@
-# IAC — Perfil padrão (genérico)
-# Copie para .iac/profile.yaml do projeto inspecionado e customize.
+# =============================================================================
+# IAC — Perfil do projeto (.iac/profile.yaml)
+# =============================================================================
+# Este arquivo configura o IAC para o projeto inspecionado.
+# Gerado pelo `iac init`. Customize conforme o seu sistema.
 #
 # Seções:
-#   name              — Nome do projeto
-#   system_description — Descrição usada nos prompts do LLM
-#   rules             — Heurísticas de domínio injetadas nos prompts
-#   taxonomy          — Catálogo de tipos + aliases para normalização
+#   name               — Nome do projeto
+#   system_description  — Descrição usada nos prompts do LLM
+#   issue_patterns      — Padrões do template de issue (regex, marcadores)
+#   app_aliases         — Mapeamento de nomes de app no título para labels
+#   url_skip_segments   — Segmentos de URL a ignorar na detecção de app
+#   rules               — Heurísticas de domínio injetadas nos prompts
+#   taxonomy            — Catálogo de tipos + aliases para normalização
 
+# -----------------------------------------------------------------------------
+# Identificação
+# -----------------------------------------------------------------------------
 name: ""
 system_description: "Django"
 
-# Heurísticas de domínio — regras injetadas nos prompts do LLM
-# Exemplos (descomente e adapte ao seu projeto):
+# -----------------------------------------------------------------------------
+# Padrões de template de issue
+# -----------------------------------------------------------------------------
+# Defina como o seu sistema gera issues de erro.
+# Se não configurar, usa detecção genérica por campos comuns.
+issue_patterns: {}
+  # title_regex: '^Erro\s+(\d+)\s*[-\u2013\u2014]\s*(.+)$'  # Regex do título (grupo 1: ID, grupo 2: app)
+  # origin_name: "erro-sistema"                                # Nome da origem nos labels
+  # origin_marker: "**Erro no Sistema**:"                      # Marcador na descrição
+  # error_link_regex: '/erro/(\d+)/'                           # Regex para extrair ID do link
+
+# -----------------------------------------------------------------------------
+# Mapeamento de apps
+# -----------------------------------------------------------------------------
+# Nomes legíveis no título → nome do app no código.
+# Usado quando a view não é informada na issue.
+app_aliases: {}
+  # Central de Serviços: centralservicos
+  # Ensino: edu
+
+# -----------------------------------------------------------------------------
+# Segmentos de URL a ignorar
+# -----------------------------------------------------------------------------
+# Ao detectar app pela URL, esses segmentos são ignorados.
+url_skip_segments:
+  - admin
+  - api
+  - static
+  - media
+  - accounts
+
+# -----------------------------------------------------------------------------
+# Heurísticas de domínio
+# -----------------------------------------------------------------------------
+# Regras injetadas nos prompts do LLM. Adapte ao seu domínio.
 rules: []
   # - "Se o interessado é Aluno, não assuma erro de permissão sem evidência"
   # - "Se a descrição menciona 'prazo', priorize constantes temporais"
 
-# Taxonomia — tipos conhecidos e aliases para normalização
+# -----------------------------------------------------------------------------
+# Taxonomia
+# -----------------------------------------------------------------------------
+# Labels conhecidos para classificação e aliases para normalização.
+# O IAC faz merge: defaults + o que você definir aqui.
 taxonomy:
   # Labels válidos para classificação
   known_tipos:
