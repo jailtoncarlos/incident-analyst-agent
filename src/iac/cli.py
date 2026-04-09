@@ -18,7 +18,7 @@ from pathlib import Path
 import click
 
 from iac import __version__
-from iac.config.settings import IAC_DIR, load_config
+from iac.config.settings import IAC_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ def analyze(
         click.echo('Nenhuma inspeção encontrada. Execute `iac init` primeiro.')
         sys.exit(1)
 
-    from iac.config.settings import load_graph, load_structure, get_effective_config
+    from iac.config.settings import get_effective_config, load_graph, load_structure
 
     # FileHandler em .iac/logs/iac.log — sempre DEBUG completo
     log_dir = iac_dir / 'logs'
@@ -123,12 +123,21 @@ def analyze(
     root_logger.addHandler(file_handler)
     # Root logger precisa estar em DEBUG para o FileHandler receber tudo
     root_logger.setLevel(logging.DEBUG)
-    from iac.agent.orchestrator import analyze_issue, format_structural_analysis, format_context_for_prompt, get_model_profile
+    from iac.agent.orchestrator import (
+        analyze_issue,
+        format_context_for_prompt,
+        format_structural_analysis,
+        get_model_profile,
+    )
     from iac.agent.prompts import (
-        build_analysis_prompt, build_response_prompt, extract_tipo_from_analysis,
-        build_investigation_prompt, parse_investigation_requests,
-        resolve_investigation_requests, build_evidence_prompt,
         _strip_context_header,
+        build_analysis_prompt,
+        build_evidence_prompt,
+        build_investigation_prompt,
+        build_response_prompt,
+        extract_tipo_from_analysis,
+        parse_investigation_requests,
+        resolve_investigation_requests,
     )
 
     # Configuração efetiva: config.yaml + CLI args
@@ -137,9 +146,11 @@ def analyze(
         'gitlab_token': gitlab_token, 'mode': mode,
     })
 
-    # Aplicar config (CLI args já sobrescreveram)
-    llm = llm or cfg['llm'].get('backend')
-    llm_model = cfg['llm']['model']
+    # Aplicar config — llm só é ativado se passado via --llm
+    # config.yaml define o default quando --llm é passado, não ativa automaticamente
+    llm_model = llm_model or cfg['llm'].get('model') or 'qwen2.5:7b'
+    if llm and not llm_model:
+        llm_model = cfg['llm']['model']
     llm_url = llm_url or cfg['llm'].get('url')
     llm_key = llm_key or cfg['llm'].get('key')
     gitlab_token = gitlab_token or cfg['gitlab'].get('token')
@@ -188,7 +199,7 @@ def analyze(
         description = ''
 
     # Log dos argumentos de entrada
-    logger.info(f'=== iac analyze iniciado ===')
+    logger.info('=== iac analyze iniciado ===')
     logger.info(f'Base dir: {base}')
     logger.info(f'Issue URL: {issue_url or "(não informado)"}')
     logger.info(f'Título: {title or "(não informado)"}')
@@ -230,6 +241,7 @@ def analyze(
 
     # Helper para enviar ao LLM
     def _send_llm(prompt_text):
+        """Envia prompt ao backend LLM configurado e retorna a resposta."""
         if llm == 'ollama':
             from iac.integrations import ollama
             _url = llm_url or 'http://localhost:11434/v1/chat/completions'
@@ -325,7 +337,7 @@ def analyze(
             response_prompt = build_response_prompt(result, llm_analysis)
             logger.info(f'[LLM] Prompt 3 (resposta ao usuário): {len(response_prompt)} chars → enviando ao {llm} ({llm_model})')
             logger.debug(f'[LLM] Prompt 3 (resposta) conteúdo:\n{response_prompt}')
-            click.echo(f'\nGerando resposta ao usuário...')
+            click.echo('\nGerando resposta ao usuário...')
             response_text = _send_llm(response_prompt)
             logger.info(f'[LLM] Resposta 3 (resposta ao usuário): {len(response_text or "")} chars')
             logger.debug(f'[LLM] Resposta 3 (resposta) conteúdo:\n{response_text}')

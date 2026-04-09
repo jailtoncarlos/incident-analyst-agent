@@ -13,10 +13,11 @@ from __future__ import annotations
 import logging
 import re
 
+from iac.agent.deep import format_deep_analysis
+from iac.agent.format import format_context_for_prompt
+from iac.agent.structural import format_structural_analysis
+
 logger = logging.getLogger(__name__)
-
-from iac.agent.orchestrator import format_context_for_prompt, format_deep_analysis, format_structural_analysis
-
 
 # ---------------------------------------------------------------------------
 # Prompt de análise
@@ -224,10 +225,17 @@ VALID_TIPOS = {
 def extract_tipo_from_analysis(analysis: str) -> str | None:
     """Extrai o label tipo::* da resposta do LLM.
 
-    Procura padrões como:
+    Procura padrões como::
+
         CLASSIFICAÇÃO: tipo::bug
         **tipo::configuracao**
         Classificação: tipo::nao-e-erro
+
+    Args:
+        analysis: Texto completo da resposta do LLM.
+
+    Returns:
+        Label tipo::* encontrado (ex: 'tipo::bug') ou None se não identificado.
     """
     match = re.search(r'(tipo::\S+)', analysis)
     if match:
@@ -306,7 +314,14 @@ REGRAS: Seja conciso. Use apenas o código fornecido. Não invente código."""
 
 
 def build_investigation_prompt(result: dict) -> str:
-    """Prompt 1: LLM analisa a view e lista o que precisa investigar."""
+    """Prompt 1: LLM analisa a view e lista o que precisa investigar.
+
+    Args:
+        result: Dict retornado por analyze_issue() com structural e context.
+
+    Returns:
+        Prompt formatado para enviar ao LLM no modo multi-prompt.
+    """
     structural_text = format_structural_analysis(result['structural'])
     context_text = format_context_for_prompt(result['context'])
     context_text = _strip_context_header(context_text)
@@ -321,9 +336,16 @@ def build_investigation_prompt(result: dict) -> str:
 def parse_investigation_requests(llm_response: str) -> list[dict]:
     """Parseia pedidos de investigação do LLM.
 
-    Procura linhas no formato:
+    Procura linhas no formato::
+
         INVESTIGAR: app.models.Model.method_name — motivo
         INVESTIGAR: app.models.Model — motivo
+
+    Args:
+        llm_response: Resposta do LLM ao prompt de investigação.
+
+    Returns:
+        Lista de dicts com type, app, model/form/name, method e reason.
     """
     requests = []
     for match in re.finditer(r'INVESTIGAR:\s*(\S+)(?:\s*[—\-]\s*(.+))?', llm_response):
@@ -396,8 +418,19 @@ def resolve_investigation_requests(
     graph: dict,
     base_dir,
 ) -> str:
-    """Resolve pedidos de investigação e retorna o código encontrado."""
+    """Resolve pedidos de investigação e retorna o código encontrado.
+
+    Args:
+        requests: Lista de dicts retornada por parse_investigation_requests().
+        structure: Mapa estrutural do projeto (.iac/structure.json).
+        graph: Grafo de dependências (.iac/graph.json).
+        base_dir: Diretório raiz do projeto inspecionado.
+
+    Returns:
+        Texto em Markdown com o código-fonte de cada componente solicitado.
+    """
     from pathlib import Path
+
     from iac.agent.tools import ler_funcao, localizar_arquivo
 
     sections = []
@@ -488,7 +521,14 @@ def build_evidence_prompt(evidence: str, view_context: str | None = None) -> str
 
 
 def compact_code(source: str) -> str:
-    """Compacta código removendo docstrings, comentários e linhas em branco."""
+    """Compacta código removendo docstrings, comentários e linhas em branco.
+
+    Args:
+        source: Código-fonte Python original.
+
+    Returns:
+        Código compactado, sem docstrings, comentários nem linhas vazias.
+    """
     lines = source.splitlines()
     result = []
     in_docstring = False

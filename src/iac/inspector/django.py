@@ -32,7 +32,16 @@ EXCLUDE_DIRS = {
 
 
 def build_django_structure(base_dir: Path, config: dict) -> dict:
-    """Constrói o mapa estrutural de um projeto Django."""
+    """Constrói o mapa estrutural de um projeto Django.
+
+    Args:
+        base_dir: Diretório raiz do projeto Django.
+        config: Dict de configuração retornado por detect_framework().
+
+    Returns:
+        Dict com chave 'apps' mapeando cada app aos seus views, models,
+        forms, admin, urls e templates.
+    """
     apps = _discover_apps(base_dir, config)
     structure: dict[str, dict] = {}
 
@@ -219,6 +228,7 @@ def _fix_legacy_syntax(source: str) -> str:
     """
 
     def _fix_except(match: re.Match) -> str:
+        """Converte cláusula except Python 2 para tupla Python 3."""
         types_str = match.group(1)
         # Separar por vírgula, preservando nomes qualificados (A.B)
         types = [t.strip() for t in types_str.split(',')]
@@ -397,9 +407,7 @@ def _extract_fk_references(node: ast.ClassDef) -> list[str]:
     for child in ast.iter_child_nodes(node):
         if isinstance(child, ast.Assign) and isinstance(child.value, ast.Call):
             call_name = _call_name(child.value)
-            if call_name and any(fk in call_name for fk in fk_types):
-                # Primeiro argumento posicional é o model referenciado
-                if child.value.args:
+            if call_name and any(fk in call_name for fk in fk_types) and child.value.args:
                     arg = child.value.args[0]
                     if isinstance(arg, ast.Name) and arg.id not in refs:
                         refs.append(arg.id)

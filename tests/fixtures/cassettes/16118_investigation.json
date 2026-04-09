@@ -1,0 +1,7 @@
+{
+  "issue_id": 16118,
+  "model": "qwen2.5-coder:7b",
+  "prompt_type": "investigation",
+  "prompt_chars": 4041,
+  "response": "### 1. Primeira impressão\nO usuário não consegue visualizar a avaliação em tempo hábil.\n\n### 2. O que preciso investigar\n\n```\nINVESTIGAR: progressao_docente.models.DiscenteAptosAvaliacao — ver fields e constantes\nINVESTIGAR: progressao_docente.models.Avaliacao — ver campos e constantes relacionados a situacao\nINVESTIGAR: comum.models.User.get_vinculo — ver implementação\n```"
+}

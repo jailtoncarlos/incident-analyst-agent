@@ -17,13 +17,21 @@ class GitLabClient:
     """Client para interagir com issues do GitLab."""
 
     def __init__(self, url: str, private_token: str, project_id: int | str):
+        """Inicializa e autentica o client GitLab."""
         self.gl = gitlab.Gitlab(url, private_token=private_token)
         self.gl.auth()
         self.project = self.gl.projects.get(int(project_id))
         logger.info(f'Conectado ao GitLab project {project_id}')
 
     def get_issue(self, issue_id: int) -> dict:
-        """Busca uma issue e retorna como dict com title, description, labels."""
+        """Busca uma issue e retorna como dict com title, description, labels.
+
+        Args:
+            issue_id: Identificador interno (iid) da issue no projeto.
+
+        Returns:
+            Dict com title, description, labels, iid e state.
+        """
         issue = self.project.issues.get(int(issue_id))
         return {
             'title': issue.title,
@@ -34,13 +42,23 @@ class GitLabClient:
         }
 
     def add_comment(self, issue_id: int, body: str) -> None:
-        """Adiciona comentário a uma issue."""
+        """Adiciona comentário a uma issue.
+
+        Args:
+            issue_id: Identificador interno (iid) da issue no projeto.
+            body: Texto do comentário em Markdown.
+        """
         issue = self.project.issues.get(int(issue_id))
         issue.discussions.create({'body': body})
         logger.info(f'Comentário adicionado à issue {issue_id}.')
 
     def add_labels(self, issue_id: int, labels: list[str]) -> None:
-        """Adiciona labels a uma issue (preserva existentes)."""
+        """Adiciona labels a uma issue (preserva existentes).
+
+        Args:
+            issue_id: Identificador interno (iid) da issue no projeto.
+            labels: Lista de labels a adicionar.
+        """
         issue = self.project.issues.get(int(issue_id))
         current = set(issue.labels)
         current.update(labels)
@@ -52,12 +70,16 @@ class GitLabClient:
 def parse_issue_url(url: str) -> tuple[str, int, int] | None:
     """Extrai gitlab_url, project_id e issue_id de uma URL de issue.
 
-    Suporta formatos:
+    Suporta formatos::
+
         https://gitlab.example.com/group/project/-/issues/123
         https://gitlab.example.com/group/project/-/work_items/123
 
+    Args:
+        url: URL completa da issue no GitLab.
+
     Returns:
-        (gitlab_url, project_id, issue_id) ou None se não reconhecer.
+        Tupla (gitlab_url, project_path, issue_id) ou None se não reconhecer.
     """
     # work_items ou issues
     match = re.match(

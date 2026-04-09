@@ -71,19 +71,14 @@ _APP_ALIASES: dict[str, str] = {
 def classify(title: str, description: str, labels: list[str] | None = None) -> dict:
     """Classifica um incidente a partir do título, descrição e labels.
 
+    Args:
+        title: Título da issue.
+        description: Descrição completa da issue.
+        labels: Labels já aplicados à issue, se houver.
+
     Returns:
-        dict com:
-            origem: 'erro-suap' | 'sentry' | 'reporte-manual'
-            app: str | None
-            view: str | None
-            url_erro: str | None
-            interessado: str | None
-            erro_id: str | None
-            descricao_usuario: str | None
-            sentry_url: str | None
-            traceback: str | None
-            tipo_sugerido: str | None
-            labels_sugeridos: list[str]
+        Dict com origem, app, view, url_erro, interessado, erro_id,
+        descricao_usuario, sentry_url, traceback, tipo_sugerido e labels_sugeridos.
     """
     labels = labels or []
     result = {
@@ -180,12 +175,10 @@ def _extrair_campos_estruturados(description: str, result: dict) -> None:
 
     # Link do erro SUAP
     match = _RE_ERRO_SUAP_LINK.search(description)
-    if match:
-        # Extrair erro_id do link se não veio do título
-        if not result['erro_id']:
-            id_match = re.search(r'/erro/(\d+)/', match.group(1))
-            if id_match:
-                result['erro_id'] = id_match.group(1)
+    if match and not result['erro_id']:
+        id_match = re.search(r'/erro/(\d+)/', match.group(1))
+        if id_match:
+            result['erro_id'] = id_match.group(1)
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +219,7 @@ def _extrair_app(title: str, description: str, result: dict) -> None:
 
     # 4. Dos labels
     for label in _APP_ALIASES.values():
-        if label in [l.lower() for l in (result.get('_labels_raw') or [])]:
+        if label in [lbl.lower() for lbl in (result.get('_labels_raw') or [])]:
             result['app'] = label
             return
 
