@@ -85,6 +85,7 @@ Para confirmar a análise, indique o que verificar:
 REGRAS:
 - Seja conciso. Use apenas o código fornecido. Não invente código.
 - Correlacione sempre a descrição do usuário com o código.
+- Se há evidência temporal (constantes TEMPO_*, datas, prazos) E evidência de acesso (PermissionDenied, eh_aluno), priorize a temporal como causa raiz — checks de acesso são geralmente gates de segurança, não causa do problema reportado.
 {rules}"""
 
 

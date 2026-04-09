@@ -52,7 +52,7 @@ def build_response_prompt(result: dict, llm_analysis: str, profile: dict | None 
 
     classification = result['classification']
     nome = classification.get('interessado', 'Usuário')
-    tipo = extract_tipo_from_analysis(llm_analysis) or classification.get('tipo_sugerido', 'não classificado')
+    tipo = extract_tipo_from_analysis(llm_analysis, profile=profile) or classification.get('tipo_sugerido', 'não classificado')
 
     return PROMPT_RESPONSE.format(
         nome=nome,

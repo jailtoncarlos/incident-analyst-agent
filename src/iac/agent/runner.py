@@ -183,8 +183,21 @@ def run_auto(result: dict, structure: dict, graph: dict, base_dir, llm: str, llm
             'mode_used': 'single',
         }
 
-    # Passo 3: escalar para loop com histórico do single
-    logger.info(f'[auto] Resposta incerta (confiança={confidence}/4) — escalando para loop')
+    # Passo 3: escalar para multi (mais estável que loop)
+    logger.info(f'[auto] Resposta incerta (confiança={confidence}/4) — escalando para multi')
+    multi_analysis = run_multi(result, structure, graph, base_dir, llm, llm_model, llm_url, llm_key, profile=profile)
+    if multi_analysis:
+        tipo = extract_tipo_from_analysis(multi_analysis, profile=profile)
+        return {
+            'analysis': multi_analysis,
+            'tipo': tipo,
+            'alteracoes': [],
+            'iterations': 0,
+            'mode_used': 'single+multi',
+        }
+
+    # Passo 4: se multi também falhou, escalar para loop
+    logger.info('[auto] Multi sem resposta — escalando para loop')
     initial_history = (
         f'**Prompt 0 — SINGLE (análise inicial)**\n\n'
         f'{single_analysis}\n\n'
@@ -197,7 +210,7 @@ def run_auto(result: dict, structure: dict, graph: dict, base_dir, llm: str, llm
         initial_history=initial_history,
         profile=profile,
     )
-    return {**loop_result, 'mode_used': 'single+loop'}
+    return {**loop_result, 'mode_used': 'single+multi+loop'}
 
 
 def _confidence_score(analysis: str) -> int:

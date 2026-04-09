@@ -130,8 +130,10 @@ DEFAULT_KNOWN_TIPOS = {
 }
 
 DEFAULT_ALIASES = {
+    # prazo-expirado
     'tipo::avaliacao-nao-disponivel': 'tipo::prazo-expirado',
     'tipo::prazo-avaliacao': 'tipo::prazo-expirado',
+    'tipo::prazo-insuficiente': 'tipo::prazo-expirado',
     'tipo::tempo-expirado': 'tipo::prazo-expirado',
     'tipo::tempo-esgotado': 'tipo::prazo-expirado',
     'tipo::tempo-de-execucao-insuficiente': 'tipo::prazo-expirado',
@@ -139,15 +141,24 @@ DEFAULT_ALIASES = {
     'tipo::tempo-habil-para-avaliacao': 'tipo::prazo-expirado',
     'tipo::tempo-de-avaliacao-expirado': 'tipo::prazo-expirado',
     'tipo::tempo-de-avaliacao-insuficiente': 'tipo::prazo-expirado',
+    'tipo::avaliacao-tempo-habil-insuficiente': 'tipo::prazo-expirado',
+    'tipo::erro-de-temporizacao': 'tipo::prazo-expirado',
+    'tipo::avaliacao-nao-realizada': 'tipo::prazo-expirado',
+    # bug
     'tipo::validacao-falhada': 'tipo::bug',
     'tipo::logica-incorreta': 'tipo::bug',
     'tipo::excecao-nao-tratada': 'tipo::bug',
     'tipo::erro-de-codigo': 'tipo::bug',
     'tipo::erro-de-negocio': 'tipo::bug',
+    'tipo::erro-de-logica': 'tipo::bug',
+    # nao-e-erro
     'tipo::comportamento-esperado': 'tipo::nao-e-erro',
     'tipo::filtro-avaliacoes': 'tipo::nao-e-erro',
+    # permissao
     'tipo::acesso-negado': 'tipo::permissao',
     'tipo::sem-permissao': 'tipo::permissao',
+    'tipo::acesso-inesperado': 'tipo::permissao',
+    'tipo::permissao-insuficiente': 'tipo::permissao',
 }
 
 DEFAULT_PROFILE = {
