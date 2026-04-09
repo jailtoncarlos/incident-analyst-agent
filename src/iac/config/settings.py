@@ -205,9 +205,12 @@ def _merge_profiles(defaults: dict, project: dict) -> dict:
         'name': project.get('name') or defaults.get('name', ''),
         'system_description': project.get('system_description') or defaults.get('system_description', 'Django'),
         'rules': project.get('rules') if project.get('rules') is not None else defaults.get('rules', []),
+        'issue_patterns': {**defaults.get('issue_patterns', {}), **project.get('issue_patterns', {})},
+        'app_aliases': {**defaults.get('app_aliases', {}), **project.get('app_aliases', {})},
+        'url_skip_segments': list(set(defaults.get('url_skip_segments', [])) | set(project.get('url_skip_segments', []))),
     }
 
-    # Taxonomia: merge
+    # Taxonomia: merge (união de known_tipos, merge de aliases)
     def_tax = defaults.get('taxonomy', {})
     proj_tax = project.get('taxonomy', {})
 
