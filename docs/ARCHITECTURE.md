@@ -188,12 +188,12 @@ Detecção automática pelo nome do modelo via `get_model_profile()`.
 
 ## Modos de operação do LLM
 
-| Modo | Módulo | Prompts | Quando |
-|------|--------|---------|--------|
-| `single` | `runner.py` | 1 prompt completo | Modelos médios/grandes |
-| `multi` | `runner.py` | Prompt 1 (investigação) → Prompt 2 (análise) → Prompt 3 (resposta) | Modelos pequenos (7B) — **acertou `tipo::prazo-expirado`** |
-| `loop` | `loop.py` | Loop iterativo — LLM decide quando parar (max 4 iterações) | Experimental ([#45](https://github.com/jailtoncarlos/incident-analyst-agent/issues/45)) |
-| `auto` | — | Seleciona `multi` ou `loop` pelo perfil | Default |
+| Modo | Módulo | Contexto enviado | Quando |
+|------|--------|------------------|--------|
+| `single` | `runner.py` | Tudo de uma vez: structural + view + refs + deep (constantes + métodos) | Modelos médios/grandes (14B+) |
+| `multi` | `runner.py` | Prompt 1: structural + view + refs → Prompt 2: evidência + view + deep constants → Prompt 3: resposta | Modelos pequenos (7B) — **acertou `tipo::prazo-expirado`** |
+| `loop` | `loop.py` | Prompt base + iterações incrementais — LLM decide quando parar (max 4) | Experimental ([#45](https://github.com/jailtoncarlos/incident-analyst-agent/issues/45)) |
+| `auto` | — | Seleciona automaticamente pelo perfil do modelo | Default |
 
 ### Modo loop — ações tipadas
 
