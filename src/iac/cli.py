@@ -52,21 +52,19 @@ def _generate_default_artifacts(iac_dir: Path, result: dict) -> None:
     """Gera artefatos de configuração padrão se não existem."""
     framework = result.get('framework', 'Python')
 
-    # .env
+    # .env — copiar template completo
     env_file = iac_dir / '.env'
     if not env_file.exists():
-        env_file.write_text(
-            '# IAC — Variáveis de ambiente\n'
-            '# Preencha e descomente conforme necessário\n'
-            '# Ref: .env.example no repositório do IAC\n\n'
-            '# GITLAB_TOKEN=\n'
-            '# IAC_LLM_BACKEND=groq\n'
-            '# IAC_LLM_MODEL=llama-3.3-70b-versatile\n'
-            '# GROQ_API_KEY=\n'
-            '# IAC_ANALYZE_MODE=multi\n'
-            '# IAC_LLM_RATE_DELAY=30\n',
-            encoding='utf-8',
-        )
+        from iac.config.settings import get_defaults_dir
+
+        env_template = get_defaults_dir() / 'env.template'
+        if env_template.exists():
+            content = env_template.read_text(encoding='utf-8')
+            content = content.replace(
+                'Copie este arquivo para .iac/.env no projeto inspecionado e preencha os valores.',
+                f'Configuração do projeto {iac_dir.parent.name}. Descomente e preencha.',
+            )
+            env_file.write_text(content, encoding='utf-8')
         click.echo('  → .iac/.env (template de configuração)')
 
     # profile.yaml — template limpo (sem defaults preenchidos)
