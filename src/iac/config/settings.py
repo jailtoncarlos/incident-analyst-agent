@@ -115,6 +115,41 @@ def save_graph(iac_dir: Path, graph: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# profile.yaml — perfil do cliente (padrões de issue, regras, taxonomia)
+# ---------------------------------------------------------------------------
+
+PROFILE_FILE = 'profile.yaml'
+
+DEFAULT_PROFILE = {
+    'system_description': 'Django',
+    'rules': [],
+}
+
+
+def load_profile(iac_dir: Path) -> dict:
+    """Carrega profile.yaml do .iac/. Retorna defaults se não existir.
+
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+
+    Returns:
+        Dict com system_description e rules.
+    """
+    import yaml
+
+    profile_file = iac_dir / PROFILE_FILE
+    if not profile_file.exists():
+        return dict(DEFAULT_PROFILE)
+
+    with open(profile_file, encoding='utf-8') as f:
+        profile = yaml.safe_load(f) or {}
+
+    merged = dict(DEFAULT_PROFILE)
+    merged.update(profile)
+    return merged
+
+
+# ---------------------------------------------------------------------------
 # .env — configuração via variáveis de ambiente
 # ---------------------------------------------------------------------------
 

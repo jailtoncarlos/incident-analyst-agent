@@ -20,7 +20,7 @@ from iac.agent.structural import format_structural_analysis
 
 logger = logging.getLogger(__name__)
 
-PROMPT_LOOP = """Você é um engenheiro de software sênior investigando uma issue de erro de produção do SUAP (ERP Django).
+PROMPT_LOOP = """Você é um engenheiro de software sênior investigando uma issue de erro de produção de um sistema {system_description}.
 
 {context}
 
@@ -35,8 +35,7 @@ Analise o que você já sabe e escolha UMA ação.
 ## Regras importantes
 - NÃO repita investigações já feitas (veja o histórico acima)
 - Se já tem código + constantes + descrição do usuário, avance para CLASSIFICAR
-- Se o interessado é Aluno e a view é de área discente, não assuma erro de permissão sem evidência explícita
-- Se a descrição menciona "tempo", "prazo", "hábil" ou "período", priorize constantes temporais (TEMPO_*, PRAZO_*, DIAS_*)
+{rules}
 - Correlacione a descrição do usuário com constantes do código (ex: "tempo hábil" → TEMPO_AVALIACAO)
 - Se precisa confirmar com dados reais, use VERIFICAR_BANCO (não INVESTIGAR)
 
@@ -109,6 +108,7 @@ def run_loop(
     max_iterations: int = 4,
     min_iterations: int = 2,
     initial_history: str | None = None,
+    profile: dict | None = None,
 ) -> dict:
     """Executa loop interativo de análise.
 
@@ -159,7 +159,11 @@ def run_loop(
             history += '\n\n⚠️ **Esta é a última iteração. Você DEVE responder com AÇÃO: CLASSIFICAR.**'
 
         # Enviar prompt
-        prompt = PROMPT_LOOP.format(context=base_context, history=history)
+        _profile = profile or {}
+        system_desc = _profile.get('system_description', 'Django')
+        rules = _profile.get('rules', [])
+        rules_text = '\n'.join(f'- {r}' for r in rules) if rules else ''
+        prompt = PROMPT_LOOP.format(context=base_context, history=history, system_description=system_desc, rules=rules_text)
         logger.info(f'[Loop iteração {iteration}] Prompt: {len(prompt)} chars → enviando ao {llm}')
         logger.debug(f'[Loop iteração {iteration}] Prompt conteúdo:\n{prompt}')
 

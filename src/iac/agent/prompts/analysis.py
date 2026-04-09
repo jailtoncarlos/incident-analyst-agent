@@ -10,8 +10,8 @@ from iac.agent.format import format_context_for_prompt
 from iac.agent.prompts.utils import _strip_context_header
 from iac.agent.structural import format_structural_analysis
 
-SYSTEM_ANALYSIS = """Você é um engenheiro de software sênior analisando uma issue de erro de produção do SUAP \
-(ERP Django, Python 3.14, Django 5.2, 100+ apps).
+SYSTEM_ANALYSIS = """Você é um engenheiro de software sênior analisando uma issue de erro de produção \
+de um sistema {system_description}.
 
 Você receberá:
 - Dados da issue (extraídos automaticamente da descrição)
@@ -64,21 +64,29 @@ REGRAS:
 - Não invente código inexistente
 - Use [ENCONTRADO] para evidências e [INFERÊNCIA] para hipóteses
 - Correlacione sempre a descrição do usuário com o código analisado
-- Se o interessado é Aluno e a view é de área discente, não assuma erro de permissão a menos que haja evidência explícita de exceção/acesso negado
-- Se a descrição menciona "tempo", "prazo", "hábil" ou "período", priorize investigar constantes temporais (TEMPO_*, PRAZO_*, DIAS_*)"""
+{rules}"""
 
 
-def build_analysis_prompt(result: dict, include_deep: bool = True) -> str:
+def build_analysis_prompt(result: dict, include_deep: bool = True, profile: dict | None = None) -> str:
     """Constrói o prompt de análise completo (modo single-prompt).
 
     Args:
         result: Dict retornado por analyze_issue() com structural, context e deep.
-        include_deep: Se False, omite a análise profunda do prompt (útil para modelos pequenos).
+        include_deep: Se False, omite a análise profunda do prompt.
+        profile: Perfil do cliente (.iac/profile.yaml) com system_description e rules.
 
     Returns:
         Prompt completo para enviar ao LLM.
     """
-    sections = [SYSTEM_ANALYSIS, '\n---\n']
+    profile = profile or {}
+    system_desc = profile.get('system_description', 'Django')
+    rules = profile.get('rules', [])
+    rules_text = '\n'.join(f'- {r}' for r in rules) if rules else ''
+
+    system = SYSTEM_ANALYSIS.format(system_description=system_desc)
+    template = TEMPLATE_ANALYSIS.format(rules=rules_text)
+
+    sections = [system, '\n---\n']
 
     structural_text = format_structural_analysis(result['structural'])
     sections.append(structural_text)
@@ -98,6 +106,6 @@ def build_analysis_prompt(result: dict, include_deep: bool = True) -> str:
                 sections.append(deep_text)
 
     sections.append('\n---\n')
-    sections.append(TEMPLATE_ANALYSIS)
+    sections.append(template)
 
     return '\n'.join(sections)

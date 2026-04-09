@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from iac.agent.prompts.utils import extract_tipo_from_analysis
 
-PROMPT_RESPONSE = """Você é um engenheiro de software sênior do SUAP (ERP Django) \
+PROMPT_RESPONSE = """Você é um engenheiro de software sênior de um sistema {system_description} \
 produzindo um relatório técnico sobre um incidente reportado.
 
 Com base na análise abaixo, gere um relatório conciso para o desenvolvedor que vai tratar o chamado.
@@ -36,16 +36,20 @@ Com base na análise abaixo, gere um relatório conciso para o desenvolvedor que
 {analise}"""
 
 
-def build_response_prompt(result: dict, llm_analysis: str) -> str:
-    """Constrói o prompt de resposta ao usuário.
+def build_response_prompt(result: dict, llm_analysis: str, profile: dict | None = None) -> str:
+    """Constrói o prompt de relatório técnico.
 
     Args:
         result: Dict retornado por analyze_issue() com classification.
         llm_analysis: Texto da análise produzida pelo LLM.
+        profile: Perfil do cliente (.iac/profile.yaml).
 
     Returns:
-        Prompt para o LLM gerar o rascunho de resposta.
+        Prompt para o LLM gerar o relatório técnico.
     """
+    profile = profile or {}
+    system_desc = profile.get('system_description', 'Django')
+
     classification = result['classification']
     nome = classification.get('interessado', 'Usuário')
     tipo = extract_tipo_from_analysis(llm_analysis) or classification.get('tipo_sugerido', 'não classificado')
@@ -54,4 +58,5 @@ def build_response_prompt(result: dict, llm_analysis: str) -> str:
         nome=nome,
         tipo=tipo,
         analise=llm_analysis,
+        system_description=system_desc,
     )

@@ -121,7 +121,7 @@ def analyze(
     # FileHandler em .iac/logs/ — cada execução em arquivo separado
     from datetime import datetime
 
-    from iac.config.settings import get_effective_config, load_graph, load_structure
+    from iac.config.settings import get_effective_config, load_graph, load_profile, load_structure
     log_dir = iac_dir / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
     log_filename = f'iac_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
@@ -141,7 +141,9 @@ def analyze(
         'gitlab_token': gitlab_token, 'mode': mode,
     })
 
-    # Resolução: CLI args (já com envvar via click) → config.yaml → defaults
+    profile = load_profile(iac_dir)
+
+    # Resolução: CLI args (já com envvar via click) → .env → defaults
     llm = llm or cfg['llm'].get('backend')
     llm_model = llm_model or cfg['llm'].get('model') or 'qwen2.5:7b'
     llm_url = llm_url or cfg['llm'].get('url')
@@ -244,13 +246,13 @@ def analyze(
 
     if llm and effective_mode == 'auto':
         click.echo(f'\n[Modo auto] Single como fast-path + loop se incerto ({llm} {llm_model})...')
-        loop_result = run_auto(result, structure, graph, base, llm, llm_model, llm_url, llm_key)
+        loop_result = run_auto(result, structure, graph, base, llm, llm_model, llm_url, llm_key, profile=profile)
         mode_used = loop_result.get('mode_used', '?')
         click.echo(f'[auto] Modo usado: {mode_used}')
 
     elif llm and effective_mode == 'loop':
         click.echo(f'\n[Modo loop] Análise interativa com {llm} ({llm_model})...')
-        loop_result = run_loop(result, structure, graph, base, llm, llm_model, llm_url, llm_key)
+        loop_result = run_loop(result, structure, graph, base, llm, llm_model, llm_url, llm_key, profile=profile)
         llm_analysis = loop_result.get('analysis')
         if loop_result.get('alteracoes'):
             click.echo(f'\n--- Alterações de código sugeridas ({len(loop_result["alteracoes"])}) ---\n')
@@ -260,11 +262,11 @@ def analyze(
 
     elif llm and effective_mode == 'multi':
         click.echo(f'\n[Modo multi-prompt] Enviando ao {llm} ({llm_model})...')
-        llm_analysis = run_multi(result, structure, graph, base, llm, llm_model, llm_url, llm_key)
+        llm_analysis = run_multi(result, structure, graph, base, llm, llm_model, llm_url, llm_key, profile=profile)
 
     elif llm:
         click.echo(f'\nEnviando prompt ao {llm} ({llm_model})...')
-        llm_analysis = run_single(result, llm, llm_model, llm_url, llm_key)
+        llm_analysis = run_single(result, llm, llm_model, llm_url, llm_key, profile=profile)
 
     if llm_analysis:
         click.echo('\n--- Análise do LLM ---\n')
@@ -289,7 +291,7 @@ def analyze(
 
         if result['classification'].get('interessado') and tipo:
             click.echo('\nGerando relatório técnico...')
-            response_text = run_response(result, llm_analysis, llm, llm_model, llm_url, llm_key)
+            response_text = run_response(result, llm_analysis, llm, llm_model, llm_url, llm_key, profile=profile)
             if response_text:
                 click.echo('\n--- Relatório técnico ---\n')
                 click.echo(response_text)
