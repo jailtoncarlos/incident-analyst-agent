@@ -164,6 +164,7 @@ def investigate(
 
 
 def _extract_view_from_traceback(traceback: str, structure: dict) -> dict | None:
+    """Extrai app e view do traceback procurando por views.py ou /app/views/."""
     for match in re.finditer(r'File\s+"[^"]*?(\w+)/views(?:/\w+)?\.py",\s*line\s+(\d+),\s*in\s+(\w+)', traceback):
         app_name, func_name = match.group(1), match.group(3)
         loc = localizar_arquivo(f'{app_name}.views.{func_name}', structure)
@@ -177,6 +178,7 @@ def _extract_view_from_traceback(traceback: str, structure: dict) -> dict | None
 
 
 def _extract_view_from_description(description: str, structure: dict) -> dict | None:
+    """Extrai app e view de uma descrição tentando campo View, URL ou menções."""
     view_field = re.search(r'\*\*View\*\*\s*:\s*(\w+)\.views\.(\w+)', description)
     if view_field:
         loc = localizar_arquivo(f'{view_field.group(1)}.views.{view_field.group(2)}', structure)
@@ -195,6 +197,7 @@ def _extract_view_from_description(description: str, structure: dict) -> dict | 
 
 
 def _new_context(**kwargs) -> dict:
+    """Cria um contexto de investigação vazio."""
     return {
         'url': kwargs.get('url'), 'description': kwargs.get('description'), 'traceback': kwargs.get('traceback'),
         'app': None, 'view_name': None, 'view_file': None, 'view_line': None, 'url_pattern': None,
@@ -204,6 +207,7 @@ def _new_context(**kwargs) -> dict:
 
 
 def _is_generic_call(call: str) -> bool:
+    """Filtra chamadas genéricas que não valem a pena investigar."""
     generic_prefixes = (
         'request.', 'self.', 'super.', 'datetime.', 'str.', 'int.', 'list.',
         'dict.', 'set.', 'len', 'range', 'print', 'isinstance', 'getattr',
@@ -223,6 +227,7 @@ def _is_generic_call(call: str) -> bool:
 
 
 def _parse_traceback(traceback: str, app_name: str | None) -> list[dict]:
+    """Parseia frames relevantes do traceback, filtrando libs."""
     frames = []
     for match in re.finditer(r'File\s+"([^"]+)",\s*line\s+(\d+),\s*in\s+(\w+)', traceback):
         file_path, line, func = match.group(1), int(match.group(2)), match.group(3)
@@ -233,4 +238,5 @@ def _parse_traceback(traceback: str, app_name: str | None) -> list[dict]:
 
 
 def _log_step(step: int, tool: str, result: str) -> None:
+    """Loga um passo do agente."""
     logger.info(f'[Passo {step}] {tool}: {result}')

@@ -187,6 +187,7 @@ def format_structural_analysis(analysis: dict) -> str:
 
 
 def _short_name(fqn: str) -> str:
+    """Encurta um FQN para exibição no fluxo (ex: app.views.func → views.func)."""
     if '/urls:' in fqn:
         return fqn.split('/urls:')[1]
     if '/templates/' in fqn:

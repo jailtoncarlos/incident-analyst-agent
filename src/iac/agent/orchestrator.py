@@ -146,6 +146,7 @@ def analyze_issue(
 
 
 def _extract_path_from_url(url: str | None) -> str | None:
+    """Extrai o path de uma URL completa (ex: https://host/path → /path)."""
     if not url:
         return None
     match = re.search(r'https?://[^/]+(/.+)', url)
