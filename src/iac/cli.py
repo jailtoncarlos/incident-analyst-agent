@@ -123,22 +123,8 @@ def analyze(
     root_logger.addHandler(file_handler)
     # Root logger precisa estar em DEBUG para o FileHandler receber tudo
     root_logger.setLevel(logging.DEBUG)
-    from iac.agent.orchestrator import (
-        analyze_issue,
-        format_context_for_prompt,
-        format_structural_analysis,
-        get_model_profile,
-    )
-    from iac.agent.prompts import (
-        _strip_context_header,
-        build_analysis_prompt,
-        build_evidence_prompt,
-        build_investigation_prompt,
-        build_response_prompt,
-        extract_tipo_from_analysis,
-        parse_investigation_requests,
-        resolve_investigation_requests,
-    )
+    from iac.agent.orchestrator import analyze_issue, format_structural_analysis, get_model_profile
+    from iac.agent.prompts import extract_tipo_from_analysis
 
     # Configuração efetiva: config.yaml + CLI args
     cfg = get_effective_config(iac_dir, {
@@ -225,104 +211,30 @@ def analyze(
     click.echo('')
     click.echo(structural_text)
 
-    # 4. Determinar modo
+    # 4. Determinar modo e executar LLM
+    from iac.agent.orchestrator import MODEL_PROFILES
+    from iac.agent.runner import run_multi, run_response, run_single
+
     if mode == 'auto' and llm:
         profile = get_model_profile(llm_model)
-        use_multi = profile is get_model_profile('qwen2.5:7b')  # small → multi
-        # Heurística: small usa multi, medium/large usa single
-        for profile_name, profile_val in __import__('iac.agent.orchestrator', fromlist=['MODEL_PROFILES']).MODEL_PROFILES.items():
-            if profile is profile_val:
-                use_multi = profile_name == 'small'
-                break
+        use_multi = any(profile is v for k, v in MODEL_PROFILES.items() if k == 'small')
     elif mode == 'multi':
         use_multi = True
     else:
         use_multi = False
 
-    # Helper para enviar ao LLM
-    def _send_llm(prompt_text):
-        """Envia prompt ao backend LLM configurado e retorna a resposta."""
-        if llm == 'ollama':
-            from iac.integrations import ollama
-            _url = llm_url or 'http://localhost:11434/v1/chat/completions'
-            return ollama.chat(prompt_text, url=_url, model=llm_model, api_key=llm_key)
-        elif llm == 'gemini':
-            from iac.integrations import gemini
-            if not llm_url or not llm_key:
-                click.echo('Gemini requer --llm-url e --llm-key.')
-                return None
-            return gemini.chat(prompt_text, url=llm_url, api_key=llm_key)
-        return None
-
-    # 5. Enviar ao LLM
     llm_analysis = None
     if llm and use_multi:
-        # --- MODO MULTI-PROMPT ---
-        logger.info('[LLM] Modo multi-prompt iniciado')
-
-        # Prompt 1: investigação
-        investigation_prompt = build_investigation_prompt(result)
-        logger.info(f'[LLM] Prompt 1 (investigação): {len(investigation_prompt)} chars → enviando ao {llm} ({llm_model})')
-        logger.debug(f'[LLM] Prompt 1 (investigação) conteúdo:\n{investigation_prompt}')
-        click.echo(f'\n[Modo multi-prompt] Enviando prompt 1 ao {llm} ({llm_model}, {len(investigation_prompt)} chars)...')
-
-        investigation_response = _send_llm(investigation_prompt)
-        logger.info(f'[LLM] Resposta 1 (investigação): {len(investigation_response or "")} chars')
-        logger.debug(f'[LLM] Resposta 1 (investigação) conteúdo:\n{investigation_response}')
-
-        if investigation_response:
-            click.echo('\n--- Resposta do prompt 1: O que o LLM quer investigar ---\n')
-            click.echo(investigation_response)
-
-            # Parsear pedidos e resolver evidência
-            requests = parse_investigation_requests(investigation_response)
-            logger.info(f'[LLM] {len(requests)} pedidos de investigação parseados')
-            for req in requests:
-                logger.debug(f'[LLM] Pedido: tipo={req["type"]}, {req}')
-
-            if requests:
-                evidence = resolve_investigation_requests(requests, structure, graph, base)
-                logger.info(f'[LLM] Evidência resolvida: {len(evidence)} chars')
-                logger.debug(f'[LLM] Evidência resolvida conteúdo:\n{evidence}')
-                click.echo(f'Evidência coletada: {len(evidence)} chars')
-
-                # Prompt 2: análise com evidência + código da view
-                view_context = _strip_context_header(format_context_for_prompt(result['context']))
-                evidence_prompt = build_evidence_prompt(evidence, view_context=view_context)
-                logger.info(f'[LLM] Prompt 2 (análise): {len(evidence_prompt)} chars → enviando ao {llm} ({llm_model})')
-                logger.debug(f'[LLM] Prompt 2 (análise) conteúdo:\n{evidence_prompt}')
-                click.echo(f'Enviando prompt 2 ao {llm} ({len(evidence_prompt)} chars)...')
-
-                llm_analysis = _send_llm(evidence_prompt)
-                logger.info(f'[LLM] Resposta 2 (análise): {len(llm_analysis or "")} chars')
-                logger.debug(f'[LLM] Resposta 2 (análise) conteúdo:\n{llm_analysis}')
-            else:
-                click.echo('LLM não pediu investigação adicional — usando prompt único.')
-                prompt = build_analysis_prompt(result)
-                logger.info(f'[LLM] Prompt único (fallback): {len(prompt)} chars')
-                logger.debug(f'[LLM] Prompt único (fallback) conteúdo:\n{prompt}')
-                llm_analysis = _send_llm(prompt)
-                logger.info(f'[LLM] Resposta (fallback): {len(llm_analysis or "")} chars')
-                logger.debug(f'[LLM] Resposta (fallback) conteúdo:\n{llm_analysis}')
-        else:
-            logger.warning('[LLM] Prompt 1 sem resposta')
-            click.echo('LLM não respondeu no passo 1.')
-
+        click.echo(f'\n[Modo multi-prompt] Enviando ao {llm} ({llm_model})...')
+        llm_analysis = run_multi(result, structure, graph, base, llm, llm_model, llm_url, llm_key)
     elif llm:
-        # --- MODO SINGLE-PROMPT ---
-        prompt = build_analysis_prompt(result)
-        logger.info(f'[LLM] Modo single-prompt: {len(prompt)} chars → enviando ao {llm} ({llm_model})')
-        logger.debug(f'[LLM] Prompt (single) conteúdo:\n{prompt}')
-        click.echo(f'\nEnviando prompt ao {llm} ({llm_model}, {len(prompt)} chars)...')
-        llm_analysis = _send_llm(prompt)
-        logger.info(f'[LLM] Resposta (single): {len(llm_analysis or "")} chars')
-        logger.debug(f'[LLM] Resposta (single) conteúdo:\n{llm_analysis}')
+        click.echo(f'\nEnviando prompt ao {llm} ({llm_model})...')
+        llm_analysis = run_single(result, llm, llm_model, llm_url, llm_key)
 
     if llm_analysis:
         click.echo('\n--- Análise do LLM ---\n')
         click.echo(llm_analysis)
 
-        # Extrair tipo
         tipo = extract_tipo_from_analysis(llm_analysis)
         if tipo:
             click.echo(f'\nClassificação: {tipo}')
@@ -332,15 +244,9 @@ def analyze(
 
         logger.info(f'[Resultado] Classificação: tipo={tipo}, labels={result["classification"].get("labels_sugeridos", [])}')
 
-        # Prompt 3: resposta ao usuário
         if result['classification'].get('interessado'):
-            response_prompt = build_response_prompt(result, llm_analysis)
-            logger.info(f'[LLM] Prompt 3 (resposta ao usuário): {len(response_prompt)} chars → enviando ao {llm} ({llm_model})')
-            logger.debug(f'[LLM] Prompt 3 (resposta) conteúdo:\n{response_prompt}')
             click.echo('\nGerando resposta ao usuário...')
-            response_text = _send_llm(response_prompt)
-            logger.info(f'[LLM] Resposta 3 (resposta ao usuário): {len(response_text or "")} chars')
-            logger.debug(f'[LLM] Resposta 3 (resposta) conteúdo:\n{response_text}')
+            response_text = run_response(result, llm_analysis, llm, llm_model, llm_url, llm_key)
             if response_text:
                 click.echo('\n--- Rascunho de resposta ---\n')
                 click.echo(response_text)
