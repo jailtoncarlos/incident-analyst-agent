@@ -123,8 +123,31 @@ def save_graph(iac_dir: Path, graph: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _load_dotenv(iac_dir: Path, user_config: dict) -> None:
+    """Carrega .env se configurado ou se existir no .iac/.
+
+    Prioridade: config.yaml (env_file) → .iac/.env → argumento --env-file.
+    """
+    from dotenv import load_dotenv
+
+    env_path = user_config.get('env_file')
+    if env_path:
+        env_file = Path(env_path)
+        if not env_file.is_absolute():
+            env_file = iac_dir / env_file
+    else:
+        env_file = iac_dir / '.env'
+
+    if env_file.exists():
+        load_dotenv(env_file, override=False)
+        logger.info(f'Variáveis carregadas de {env_file}')
+
+
 def load_user_config(iac_dir: Path) -> dict:
     """Carrega config.yaml do .iac/. Retorna defaults se não existir.
+
+    Também carrega .env se existir em .iac/.env ou no caminho
+    configurado em config.yaml (env_file: caminho/para/.env).
 
     Args:
         iac_dir: Caminho para o diretório .iac do projeto.
@@ -134,10 +157,13 @@ def load_user_config(iac_dir: Path) -> dict:
     """
     config_file = iac_dir / CONFIG_FILE
     if not config_file.exists():
+        _load_dotenv(iac_dir, {})
         return dict(DEFAULT_CONFIG)
 
     with open(config_file, encoding='utf-8') as f:
         user_config = yaml.safe_load(f) or {}
+
+    _load_dotenv(iac_dir, user_config)
 
     # Merge com defaults (user sobrescreve)
     merged = dict(DEFAULT_CONFIG)

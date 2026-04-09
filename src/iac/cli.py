@@ -88,6 +88,7 @@ def init(base_dir: str, force: bool, stats: bool):
 @click.option('--llm-model', type=str, default=None, help='Modelo do LLM (default: config.yaml ou qwen2.5:7b).')
 @click.option('--gitlab-token', type=str, envvar='GITLAB_TOKEN', default=None, help='Token GitLab.')
 @click.option('--mode', type=click.Choice(['auto', 'single', 'multi', 'loop']), default='auto', help='Modo: auto, single (1 prompt), multi (3 prompts fixos), loop (iterativo, LLM decide).')
+@click.option('--env-file', type=click.Path(), default=None, help='Caminho para .env (default: .iac/.env).')
 @click.option('--dry-run', is_flag=True, help='Não posta comentários nem aplica labels.')
 @click.option('--post', is_flag=True, help='Postar análise como comentário na issue.')
 def analyze(
@@ -101,6 +102,7 @@ def analyze(
     llm_model: str,
     gitlab_token: str,
     mode: str,
+    env_file: str,
     dry_run: bool,
     post: bool,
 ):
@@ -108,6 +110,16 @@ def analyze(
     if not issue_url and not title and not description:
         click.echo('Informe --issue-url, --title ou --description.')
         sys.exit(1)
+
+    # Carregar .env se informado via --env-file
+    if env_file:
+        from dotenv import load_dotenv
+        env_path = Path(env_file)
+        if env_path.exists():
+            load_dotenv(env_path, override=False)
+        else:
+            click.echo(f'Arquivo .env não encontrado: {env_file}')
+            sys.exit(1)
 
     base = Path(base_dir).resolve()
     iac_dir = base / IAC_DIR
