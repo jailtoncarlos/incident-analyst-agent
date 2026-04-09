@@ -69,19 +69,20 @@ def _generate_default_artifacts(iac_dir: Path, result: dict) -> None:
         )
         click.echo('  → .iac/.env (template de configuração)')
 
-    # profile.yaml
+    # profile.yaml — copiar do template de defaults
     profile_file = iac_dir / 'profile.yaml'
     if not profile_file.exists():
-        import yaml
+        import shutil
 
-        profile = {
-            'name': iac_dir.parent.name,
-            'system_description': f'{framework}',
-            'rules': [],
-        }
-        with open(profile_file, 'w', encoding='utf-8') as f:
-            yaml.dump(profile, f, default_flow_style=False, allow_unicode=True)
-        click.echo(f'  → .iac/profile.yaml (perfil do projeto: {framework})')
+        from iac.config.settings import get_defaults_dir
+
+        default_profile = get_defaults_dir() / 'profile.yaml'
+        if default_profile.exists():
+            shutil.copy(default_profile, profile_file)
+        else:
+            import yaml
+            yaml.dump({'name': iac_dir.parent.name, 'system_description': framework, 'rules': []}, open(profile_file, 'w', encoding='utf-8'), default_flow_style=False, allow_unicode=True)  # noqa: SIM115
+        click.echo('  → .iac/profile.yaml (perfil do projeto — customize para seu sistema)')
 
     # logs/
     log_dir = iac_dir / 'logs'

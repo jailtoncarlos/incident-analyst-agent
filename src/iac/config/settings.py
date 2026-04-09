@@ -120,33 +120,92 @@ def save_graph(iac_dir: Path, graph: dict) -> None:
 
 PROFILE_FILE = 'profile.yaml'
 
+DEFAULT_KNOWN_TIPOS = {
+    'tipo::bug',
+    'tipo::configuracao',
+    'tipo::dados-cadastrais',
+    'tipo::prazo-expirado',
+    'tipo::nao-e-erro',
+    'tipo::permissao',
+}
+
+DEFAULT_ALIASES = {
+    'tipo::avaliacao-nao-disponivel': 'tipo::prazo-expirado',
+    'tipo::prazo-avaliacao': 'tipo::prazo-expirado',
+    'tipo::tempo-expirado': 'tipo::prazo-expirado',
+    'tipo::tempo-esgotado': 'tipo::prazo-expirado',
+    'tipo::tempo-de-execucao-insuficiente': 'tipo::prazo-expirado',
+    'tipo::tempo-insuficiente-para-avaliacao': 'tipo::prazo-expirado',
+    'tipo::tempo-habil-para-avaliacao': 'tipo::prazo-expirado',
+    'tipo::tempo-de-avaliacao-expirado': 'tipo::prazo-expirado',
+    'tipo::tempo-de-avaliacao-insuficiente': 'tipo::prazo-expirado',
+    'tipo::validacao-falhada': 'tipo::bug',
+    'tipo::logica-incorreta': 'tipo::bug',
+    'tipo::excecao-nao-tratada': 'tipo::bug',
+    'tipo::erro-de-codigo': 'tipo::bug',
+    'tipo::erro-de-negocio': 'tipo::bug',
+    'tipo::comportamento-esperado': 'tipo::nao-e-erro',
+    'tipo::filtro-avaliacoes': 'tipo::nao-e-erro',
+    'tipo::acesso-negado': 'tipo::permissao',
+    'tipo::sem-permissao': 'tipo::permissao',
+}
+
 DEFAULT_PROFILE = {
     'system_description': 'Django',
     'rules': [],
+    'taxonomy': {
+        'known_tipos': list(DEFAULT_KNOWN_TIPOS),
+        'aliases': dict(DEFAULT_ALIASES),
+    },
 }
+
+
+def get_defaults_dir() -> Path:
+    """Retorna o diretório de defaults do IAC."""
+    return Path(__file__).parent.parent / 'defaults'
 
 
 def load_profile(iac_dir: Path) -> dict:
     """Carrega profile.yaml do .iac/. Retorna defaults se não existir.
 
-    Args:
-        iac_dir: Caminho para o diretório .iac do projeto.
-
-    Returns:
-        Dict com system_description e rules.
+    Fallback: src/iac/defaults/profile.yaml.
     """
     import yaml
 
     profile_file = iac_dir / PROFILE_FILE
     if not profile_file.exists():
-        return dict(DEFAULT_PROFILE)
+        # Tentar carregar defaults do pacote
+        default_file = get_defaults_dir() / PROFILE_FILE
+        if default_file.exists():
+            with open(default_file, encoding='utf-8') as f:
+                return _build_profile(yaml.safe_load(f) or {})
+        return _build_profile({})
 
     with open(profile_file, encoding='utf-8') as f:
         profile = yaml.safe_load(f) or {}
 
-    merged = dict(DEFAULT_PROFILE)
-    merged.update(profile)
-    return merged
+    return _build_profile(profile)
+
+
+def _build_profile(raw: dict) -> dict:
+    """Constrói profile completo com defaults para campos ausentes."""
+    profile = {
+        'name': raw.get('name', ''),
+        'system_description': raw.get('system_description', 'Django'),
+        'rules': raw.get('rules', []),
+    }
+
+    # Taxonomia: merge com defaults
+    taxonomy = raw.get('taxonomy', {})
+    known = taxonomy.get('known_tipos')
+    aliases = taxonomy.get('aliases')
+
+    profile['taxonomy'] = {
+        'known_tipos': set(known) if known else set(DEFAULT_KNOWN_TIPOS),
+        'aliases': dict(aliases) if aliases else dict(DEFAULT_ALIASES),
+    }
+
+    return profile
 
 
 # ---------------------------------------------------------------------------

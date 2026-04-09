@@ -14,7 +14,7 @@ import re
 
 from iac.agent.format import format_context_for_prompt
 from iac.agent.prompts.multi import parse_investigation_requests, resolve_investigation_requests
-from iac.agent.prompts.utils import KNOWN_TIPOS, extract_tipo_from_analysis, normalize_to_known
+from iac.agent.prompts.utils import extract_tipo_from_analysis, normalize_to_known
 from iac.agent.runner import send_to_llm
 from iac.agent.structural import format_structural_analysis
 
@@ -131,6 +131,11 @@ def run_loop(
     if deep_constants:
         base_context += '\n---\n' + deep_constants
 
+    # Taxonomia do profile
+    _profile = profile or {}
+    _taxonomy = _profile.get('taxonomy', {})
+    _known_tipos = _taxonomy.get('known_tipos', set())
+
     history_entries = []
     if initial_history:
         history_entries.append(initial_history)
@@ -180,7 +185,7 @@ def run_loop(
         logger.info(f'[Loop iteração {iteration}] Ação: {action}')
 
         if action == 'CLASSIFICAR':
-            tipo_candidate = extract_tipo_from_analysis(response)
+            tipo_candidate = extract_tipo_from_analysis(response, profile=_profile)
 
             # Impedir classificação prematura (antes de min_iterations)
             if iteration < min_iterations and not force_classify:
@@ -193,15 +198,15 @@ def run_loop(
                 continue
 
             # Validar taxonomia — normalizar label se fora do catálogo
-            if tipo_candidate and tipo_candidate not in KNOWN_TIPOS:
-                normalized = normalize_to_known(tipo_candidate)
+            if tipo_candidate and tipo_candidate not in _known_tipos:
+                normalized = normalize_to_known(tipo_candidate, profile=_profile)
                 if normalized:
                     logger.info(f'[Loop] Label normalizado: {tipo_candidate} → {normalized}')
                     tipo_candidate = normalized
 
             # Se não extraiu tipo, tentar repair prompt
             if not tipo_candidate:
-                tipo_candidate = _repair_classification(response, llm, llm_model, llm_url, llm_key)
+                tipo_candidate = _repair_classification(response, llm, llm_model, llm_url, llm_key, profile=_profile)
 
             final_analysis = response
             final_tipo = tipo_candidate
@@ -255,12 +260,12 @@ def run_loop(
 
         else:
             # Ação não reconhecida — tentar extrair classificação mesmo assim
-            tipo = extract_tipo_from_analysis(response)
+            tipo = extract_tipo_from_analysis(response, profile=_profile)
             if not tipo:
-                tipo = _repair_classification(response, llm, llm_model, llm_url, llm_key)
+                tipo = _repair_classification(response, llm, llm_model, llm_url, llm_key, profile=_profile)
             if tipo:
-                if tipo not in KNOWN_TIPOS:
-                    normalized = normalize_to_known(tipo)
+                if tipo not in _known_tipos:
+                    normalized = normalize_to_known(tipo, profile=_profile)
                     if normalized:
                         tipo = normalized
                 final_analysis = response
@@ -273,7 +278,7 @@ def run_loop(
     if not final_analysis and history_entries:
         logger.warning(f'[Loop] Max iterações ({max_iterations}) sem CLASSIFICAR — forçando')
         final_analysis = '\n---\n'.join(history_entries)
-        final_tipo = extract_tipo_from_analysis(final_analysis)
+        final_tipo = extract_tipo_from_analysis(final_analysis, profile=_profile)
 
     return {
         'analysis': final_analysis,
@@ -363,7 +368,7 @@ def _enrich_on_repeat(req: dict, structure: dict, graph: dict, base_dir) -> str:
     return '\n'.join(sections)
 
 
-def _repair_classification(response: str, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> str | None:
+def _repair_classification(response: str, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None, profile: dict | None = None) -> str | None:
     """Tenta extrair classificação via repair prompt curto."""
     snippet = response[:1500]
     prompt = PROMPT_REPAIR.format(analysis_snippet=snippet)
@@ -371,7 +376,7 @@ def _repair_classification(response: str, llm: str, llm_model: str, llm_url: str
     repair_response = send_to_llm(prompt, llm, llm_model, llm_url, llm_key)
     if not repair_response:
         return None
-    tipo = extract_tipo_from_analysis(repair_response)
+    tipo = extract_tipo_from_analysis(repair_response, profile=profile)
     if tipo:
         logger.info(f'[Loop] Repair extraiu: {tipo}')
     return tipo

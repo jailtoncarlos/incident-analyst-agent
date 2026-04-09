@@ -1,0 +1,53 @@
+# IAC — Perfil padrão (genérico)
+# Copie para .iac/profile.yaml do projeto inspecionado e customize.
+#
+# Seções:
+#   name              — Nome do projeto
+#   system_description — Descrição usada nos prompts do LLM
+#   rules             — Heurísticas de domínio injetadas nos prompts
+#   taxonomy          — Catálogo de tipos + aliases para normalização
+
+name: ""
+system_description: "Django"
+
+# Heurísticas de domínio — regras injetadas nos prompts do LLM
+# Exemplos (descomente e adapte ao seu projeto):
+rules: []
+  # - "Se o interessado é Aluno, não assuma erro de permissão sem evidência"
+  # - "Se a descrição menciona 'prazo', priorize constantes temporais"
+
+# Taxonomia — tipos conhecidos e aliases para normalização
+taxonomy:
+  # Labels válidos para classificação
+  known_tipos:
+    - tipo::bug
+    - tipo::configuracao
+    - tipo::dados-cadastrais
+    - tipo::prazo-expirado
+    - tipo::nao-e-erro
+    - tipo::permissao
+
+  # Labels criativos do LLM → label conhecido mais próximo
+  aliases:
+    # prazo-expirado
+    tipo::avaliacao-nao-disponivel: tipo::prazo-expirado
+    tipo::prazo-avaliacao: tipo::prazo-expirado
+    tipo::tempo-expirado: tipo::prazo-expirado
+    tipo::tempo-esgotado: tipo::prazo-expirado
+    tipo::tempo-de-execucao-insuficiente: tipo::prazo-expirado
+    tipo::tempo-insuficiente-para-avaliacao: tipo::prazo-expirado
+    tipo::tempo-habil-para-avaliacao: tipo::prazo-expirado
+    tipo::tempo-de-avaliacao-expirado: tipo::prazo-expirado
+    tipo::tempo-de-avaliacao-insuficiente: tipo::prazo-expirado
+    # bug
+    tipo::validacao-falhada: tipo::bug
+    tipo::logica-incorreta: tipo::bug
+    tipo::excecao-nao-tratada: tipo::bug
+    tipo::erro-de-codigo: tipo::bug
+    tipo::erro-de-negocio: tipo::bug
+    # nao-e-erro
+    tipo::comportamento-esperado: tipo::nao-e-erro
+    tipo::filtro-avaliacoes: tipo::nao-e-erro
+    # permissao
+    tipo::acesso-negado: tipo::permissao
+    tipo::sem-permissao: tipo::permissao
