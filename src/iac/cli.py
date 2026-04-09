@@ -111,16 +111,6 @@ def analyze(
         click.echo('Informe --issue-url, --title ou --description.')
         sys.exit(1)
 
-    # Carregar .env se informado via --env-file
-    if env_file:
-        from dotenv import load_dotenv
-        env_path = Path(env_file)
-        if env_path.exists():
-            load_dotenv(env_path, override=False)
-        else:
-            click.echo(f'Arquivo .env não encontrado: {env_file}')
-            sys.exit(1)
-
     base = Path(base_dir).resolve()
     iac_dir = base / IAC_DIR
 
@@ -145,7 +135,7 @@ def analyze(
     from iac.agent.orchestrator import analyze_issue, format_structural_analysis
     from iac.agent.prompts import extract_classificacao
 
-    # Configuração efetiva: config.yaml + CLI args
+    # Configuração efetiva: .env + CLI args
     cfg = get_effective_config(iac_dir, {
         'llm': llm, 'llm_model': llm_model, 'llm_url': llm_url, 'llm_key': llm_key,
         'gitlab_token': gitlab_token, 'mode': mode,
@@ -177,7 +167,7 @@ def analyze(
         gitlab_url_parsed, project_path, issue_id = parsed
         token = gitlab_token
         if not token:
-            click.echo('Token GitLab necessário. Use --gitlab-token, GITLAB_TOKEN ou config.yaml.')
+            click.echo('Token GitLab necessário. Use --gitlab-token, GITLAB_TOKEN ou .iac/.env.')
             sys.exit(1)
 
         click.echo(f'Buscando issue {issue_id} no GitLab...')
@@ -337,7 +327,7 @@ def analyze(
 @click.option('--set', 'set_values', multiple=True, help='Definir valor: seção.chave=valor (ex: llm.model=qwen2.5-coder:7b)')
 @click.option('--show', is_flag=True, help='Exibir configuração atual.')
 def config_cmd(base_dir: str, set_values: tuple, show: bool):
-    """Gerencia configuração do projeto (.iac/config.yaml)."""
+    """Gerencia configuração do projeto (.iac/.env)."""
     base = Path(base_dir).resolve()
     iac_dir = base / IAC_DIR
 
@@ -345,31 +335,37 @@ def config_cmd(base_dir: str, set_values: tuple, show: bool):
         click.echo('Nenhuma inspeção encontrada. Execute `iac init` primeiro.')
         sys.exit(1)
 
-    from iac.config.settings import load_user_config, save_user_config
+    from iac.config.settings import get_effective_config
 
-    config = load_user_config(iac_dir)
+    env_file = iac_dir / '.env'
 
     if set_values:
+        lines = env_file.read_text(encoding='utf-8').splitlines() if env_file.exists() else []
         for item in set_values:
             if '=' not in item:
-                click.echo(f'Formato inválido: {item}. Use seção.chave=valor')
+                click.echo(f'Formato inválido: {item}. Use CHAVE=valor')
                 continue
             key, value = item.split('=', 1)
-            parts = key.split('.')
-            if len(parts) == 2:
-                section, field = parts
-                if section not in config:
-                    config[section] = {}
-                config[section][field] = value
-                click.echo(f'{section}.{field} = {value}')
-            else:
-                click.echo(f'Formato inválido: {item}. Use seção.chave=valor')
-
-        save_user_config(iac_dir, config)
+            key = key.upper()
+            # Atualizar ou adicionar
+            updated = False
+            for i, line in enumerate(lines):
+                if line.startswith((f'{key}=', f'# {key}=')):
+                    lines[i] = f'{key}={value}'
+                    updated = True
+                    break
+            if not updated:
+                lines.append(f'{key}={value}')
+            click.echo(f'{key}={value}')
+        env_file.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
     if show or not set_values:
-        import yaml
-        click.echo(yaml.dump(config, default_flow_style=False, allow_unicode=True))
+        config = get_effective_config(iac_dir, {})
+        for section, values in config.items():
+            if isinstance(values, dict):
+                for k, v in values.items():
+                    if v is not None:
+                        click.echo(f'{section}.{k} = {v}')
 
 
 @main.command()

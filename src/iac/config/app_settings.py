@@ -3,7 +3,7 @@
 Princípio 1 — Explícito sobre Implícito:
 todas as configurações tipadas, com defaults explícitos e validação.
 
-Hierarquia: defaults → config.yaml → variáveis de ambiente → CLI args.
+Hierarquia: defaults → .env → variáveis de ambiente → CLI args.
 
 Variáveis de ambiente aceitas:
     GROQ_API_KEY     — API key do Groq (gratuito)

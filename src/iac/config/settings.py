@@ -6,16 +6,12 @@ import json
 import logging
 from pathlib import Path
 
-import yaml
-
 logger = logging.getLogger(__name__)
 
 IAC_DIR = '.iac'
 PROJECT_FILE = 'project.json'
 STRUCTURE_FILE = 'structure.json'
 GRAPH_FILE = 'graph.json'
-CONFIG_FILE = 'config.yaml'
-
 DEFAULT_CONFIG = {
     'llm': {
         'backend': 'ollama',
@@ -119,121 +115,73 @@ def save_graph(iac_dir: Path, graph: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# config.yaml — configurações persistentes do projeto
+# .env — configuração via variáveis de ambiente
 # ---------------------------------------------------------------------------
 
 
-def _load_dotenv(iac_dir: Path, user_config: dict) -> None:
-    """Carrega .env se configurado ou se existir no .iac/.
+def load_dotenv(iac_dir: Path, env_file: str | None = None) -> None:
+    """Carrega .env do .iac/ ou de caminho customizado.
 
-    Prioridade: config.yaml (env_file) → .iac/.env → argumento --env-file.
+    Args:
+        iac_dir: Caminho para o diretório .iac do projeto.
+        env_file: Caminho customizado para .env (override).
     """
-    from dotenv import load_dotenv
+    from dotenv import load_dotenv as _load_dotenv
 
-    env_path = user_config.get('env_file')
-    if env_path:
-        env_file = Path(env_path)
-        if not env_file.is_absolute():
-            env_file = iac_dir / env_file
+    if env_file:
+        path = Path(env_file)
+        if not path.is_absolute():
+            path = iac_dir / path
     else:
-        env_file = iac_dir / '.env'
+        path = iac_dir / '.env'
 
-    if env_file.exists():
-        load_dotenv(env_file, override=False)
-        logger.info(f'Variáveis carregadas de {env_file}')
-
-
-def load_user_config(iac_dir: Path) -> dict:
-    """Carrega config.yaml do .iac/. Retorna defaults se não existir.
-
-    Também carrega .env se existir em .iac/.env ou no caminho
-    configurado em config.yaml (env_file: caminho/para/.env).
-
-    Args:
-        iac_dir: Caminho para o diretório .iac do projeto.
-
-    Returns:
-        Dict com configuração efetiva (defaults + valores do usuário mesclados).
-    """
-    config_file = iac_dir / CONFIG_FILE
-    if not config_file.exists():
-        _load_dotenv(iac_dir, {})
-        return dict(DEFAULT_CONFIG)
-
-    with open(config_file, encoding='utf-8') as f:
-        user_config = yaml.safe_load(f) or {}
-
-    _load_dotenv(iac_dir, user_config)
-
-    # Merge com defaults (user sobrescreve)
-    merged = dict(DEFAULT_CONFIG)
-    for section, defaults in DEFAULT_CONFIG.items():
-        if section in user_config and isinstance(defaults, dict):
-            merged[section] = {**defaults, **user_config[section]}
-        elif section in user_config:
-            merged[section] = user_config[section]
-
-    return merged
-
-
-def save_user_config(iac_dir: Path, config: dict) -> None:
-    """Salva config.yaml no .iac/.
-
-    Args:
-        iac_dir: Caminho para o diretório .iac do projeto.
-        config: Dict de configuração a persistir (valores None são omitidos).
-    """
-    iac_dir.mkdir(parents=True, exist_ok=True)
-    config_file = iac_dir / CONFIG_FILE
-
-    # Remover valores None para config limpo
-    clean = {}
-    for section, values in config.items():
-        if isinstance(values, dict):
-            filtered = {k: v for k, v in values.items() if v is not None}
-            if filtered:
-                clean[section] = filtered
-        elif values is not None:
-            clean[section] = values
-
-    with open(config_file, 'w', encoding='utf-8') as f:
-        yaml.dump(clean, f, default_flow_style=False, allow_unicode=True)
-    logger.info(f'Configuração salva em {config_file}')
+    if path.exists():
+        _load_dotenv(path, override=False)
+        logger.info(f'Variáveis carregadas de {path}')
 
 
 def get_effective_config(iac_dir: Path, cli_args: dict) -> dict:
-    """Retorna configuração efetiva: config.yaml + overrides do CLI.
+    """Retorna configuração efetiva: defaults + .env + CLI args.
 
-    CLI args sobrescrevem config.yaml que sobrescreve defaults.
+    Hierarquia: DEFAULT_CONFIG → .env (via os.environ) → CLI args.
 
     Args:
         iac_dir: Caminho para o diretório .iac do projeto.
-        cli_args: Dict com args do CLI (llm, llm_model, llm_url, llm_key, gitlab_token, mode).
+        cli_args: Dict com args do CLI.
 
     Returns:
-        Dict de configuração com seções llm, gitlab e analyze já mescladas.
+        Dict de configuração com seções llm, gitlab e analyze.
     """
-    config = load_user_config(iac_dir)
+    import os
 
-    # Mapear CLI args para seções do config
-    overrides = {
-        'llm': {
-            'backend': cli_args.get('llm'),
-            'model': cli_args.get('llm_model'),
-            'url': cli_args.get('llm_url'),
-            'key': cli_args.get('llm_key'),
-        },
-        'gitlab': {
-            'token': cli_args.get('gitlab_token'),
-        },
-        'analyze': {
-            'mode': cli_args.get('mode'),
-        },
+    load_dotenv(iac_dir)
+
+    config = dict(DEFAULT_CONFIG)
+
+    # .env → os.environ → config (só se não None)
+    env_map = {
+        ('llm', 'backend'): os.environ.get('IAC_LLM_BACKEND'),
+        ('llm', 'model'): os.environ.get('IAC_LLM_MODEL'),
+        ('llm', 'url'): os.environ.get('IAC_LLM_URL'),
+        ('llm', 'key'): os.environ.get('GROQ_API_KEY') or os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('GEMINI_API_KEY'),
+        ('gitlab', 'token'): os.environ.get('GITLAB_TOKEN'),
+        ('analyze', 'mode'): os.environ.get('IAC_ANALYZE_MODE'),
     }
+    for (section, key), value in env_map.items():
+        if value:
+            config[section][key] = value
 
-    for section, values in overrides.items():
-        for key, value in values.items():
-            if value is not None:
-                config[section][key] = value
+    # CLI args (maior prioridade)
+    overrides = {
+        ('llm', 'backend'): cli_args.get('llm'),
+        ('llm', 'model'): cli_args.get('llm_model'),
+        ('llm', 'url'): cli_args.get('llm_url'),
+        ('llm', 'key'): cli_args.get('llm_key'),
+        ('gitlab', 'token'): cli_args.get('gitlab_token'),
+        ('analyze', 'mode'): cli_args.get('mode'),
+    }
+    for (section, key), value in overrides.items():
+        if value is not None:
+            config[section][key] = value
 
     return config
