@@ -76,9 +76,13 @@ def chat(
             logger.error(f'Requisição ao DeepSeek falhou: {e}')
             return None
 
-        if response.status_code in (429, 413):
+        if response.status_code == 413:
+            logger.warning(f'[DeepSeek] Prompt muito grande (413) — {len(prompt)} chars excede limite do modelo')
+            return 'PROMPT_TOO_LARGE'
+
+        if response.status_code == 429:
             wait = _parse_retry_after(response.text)
-            logger.warning(f'[DeepSeek] Rate limit ({response.status_code}) — aguardando {wait}s (tentativa {attempt}/{DEFAULT_MAX_RETRIES})')
+            logger.warning(f'[DeepSeek] Rate limit (429) — aguardando {wait}s (tentativa {attempt}/{DEFAULT_MAX_RETRIES})')
             time.sleep(wait)
             continue
 

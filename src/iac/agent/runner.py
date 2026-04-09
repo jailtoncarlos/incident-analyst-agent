@@ -62,6 +62,9 @@ def send_to_llm(prompt: str, llm: str, llm_model: str, llm_url: str | None, llm_
             return None
         result = gemini.chat(prompt, url=llm_url, api_key=llm_key)
     elapsed = time.time() - t0
+    if result == 'PROMPT_TOO_LARGE':
+        logger.warning(f'[LLM] send_to_llm: prompt muito grande em {elapsed:.1f}s')
+        return 'PROMPT_TOO_LARGE'
     if result:
         logger.info(f'[LLM] send_to_llm: {len(result)} chars em {elapsed:.1f}s')
     else:
@@ -70,27 +73,30 @@ def send_to_llm(prompt: str, llm: str, llm_model: str, llm_url: str | None, llm_
 
 
 def run_single(result: dict, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> str | None:
-    """Executa análise em modo single-prompt.
+    """Executa análise em modo single-prompt com ajuste progressivo.
 
-    Args:
-        result: Dict retornado por analyze_issue().
-        llm: Backend LLM.
-        llm_model: Nome do modelo.
-        llm_url: Endpoint da API.
-        llm_key: API key.
-
-    Returns:
-        Texto da análise do LLM ou None.
+    Se o prompt for grande demais (413), reduz progressivamente:
+    1. Com deep → 2. Sem deep → 3. Desiste.
     """
     profile = get_model_profile(llm_model)
     include_deep = profile.get('deep_include_methods', True)
     prompt = build_analysis_prompt(result, include_deep=include_deep)
     logger.info(f'[LLM] Modo single-prompt: {len(prompt)} chars (deep={include_deep}) → enviando ao {llm} ({llm_model})')
-    logger.debug(f'[LLM] Prompt (single) conteúdo:\n{prompt}')
 
     analysis = send_to_llm(prompt, llm, llm_model, llm_url, llm_key)
+
+    # Ajuste progressivo: se prompt grande demais, reduzir
+    if analysis == 'PROMPT_TOO_LARGE' and include_deep:
+        logger.info('[LLM] Prompt muito grande — retentando sem deep')
+        prompt = build_analysis_prompt(result, include_deep=False)
+        logger.info(f'[LLM] Modo single-prompt (sem deep): {len(prompt)} chars → enviando ao {llm} ({llm_model})')
+        analysis = send_to_llm(prompt, llm, llm_model, llm_url, llm_key)
+
+    if analysis == 'PROMPT_TOO_LARGE':
+        logger.error('[LLM] Prompt ainda muito grande mesmo sem deep — modelo não suporta este tamanho')
+        return None
+
     logger.info(f'[LLM] Resposta (single): {len(analysis or "")} chars')
-    logger.debug(f'[LLM] Resposta (single) conteúdo:\n{analysis}')
     return analysis
 
 
