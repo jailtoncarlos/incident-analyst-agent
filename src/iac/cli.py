@@ -115,12 +115,14 @@ def analyze(
         click.echo('Nenhuma inspeção encontrada. Execute `iac init` primeiro.')
         sys.exit(1)
 
-    from iac.config.settings import get_effective_config, load_graph, load_structure
+    # FileHandler em .iac/logs/ — cada execução em arquivo separado
+    from datetime import datetime
 
-    # FileHandler em .iac/logs/iac.log — sempre DEBUG completo
+    from iac.config.settings import get_effective_config, load_graph, load_structure
     log_dir = iac_dir / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.FileHandler(log_dir / 'iac.log', encoding='utf-8')
+    log_filename = f'iac_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+    file_handler = logging.FileHandler(log_dir / log_filename, encoding='utf-8')
     file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s', datefmt='%H:%M:%S'))
     file_handler.setLevel(logging.DEBUG)
     root_logger = logging.getLogger()
