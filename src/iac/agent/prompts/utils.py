@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-VALID_TIPOS = {
+KNOWN_TIPOS = {
     'tipo::bug',
     'tipo::configuracao',
     'tipo::dados-cadastrais',
@@ -19,7 +19,9 @@ def extract_tipo_from_analysis(analysis: str) -> str | None:
     Procura padrões como::
 
         CLASSIFICAÇÃO: tipo::bug
-        **tipo::configuracao**
+        CLASSIFICAÇÃO: tipo::permissao
+
+    Aceita labels conhecidos e novos criados pelo LLM.
 
     Args:
         analysis: Texto completo da resposta do LLM.
@@ -27,11 +29,9 @@ def extract_tipo_from_analysis(analysis: str) -> str | None:
     Returns:
         Label tipo::* encontrado ou None.
     """
-    match = re.search(r'(tipo::\S+)', analysis)
+    match = re.search(r'(tipo::[a-z][a-z0-9-]*)', analysis)
     if match:
-        tipo = match.group(1).strip('*').strip('`').strip()
-        if tipo in VALID_TIPOS:
-            return tipo
+        return match.group(1).strip('*').strip('`').strip()
     return None
 
 

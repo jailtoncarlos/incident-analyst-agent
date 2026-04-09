@@ -18,7 +18,7 @@ Você receberá:
 - Análise estrutural (componentes e fluxo obtidos via inspeção do código)
 - Código-fonte da view e referências (métodos, models, forms)
 
-Responda em português do Brasil com EXATAMENTE estas 5 seções numeradas."""
+Responda em português do Brasil com as seguintes seções."""
 
 TEMPLATE_ANALYSIS = """### 1. Análise do código
 - Descreva o fluxo da view em linguagem acessível
@@ -29,32 +29,37 @@ TEMPLATE_ANALYSIS = """### 1. Análise do código
 - Condições em que o erro/situação ocorre
 - Referências a arquivo:linha do código que sustentam a análise
 - Marque com [ENCONTRADO] evidências no código, [INFERÊNCIA] hipóteses
+- Correlacione a descrição do usuário com constantes e campos do código (ex: se o usuário menciona "prazo" ou "tempo", verifique constantes de tempo como TEMPO_AVALIACAO)
 
 ### 3. Classificação
-Responda com EXATAMENTE UMA destas opções (copie literal):
-- CLASSIFICAÇÃO: tipo::bug
-- CLASSIFICAÇÃO: tipo::configuracao
-- CLASSIFICAÇÃO: tipo::dados-cadastrais
-- CLASSIFICAÇÃO: tipo::prazo-expirado
-- CLASSIFICAÇÃO: tipo::nao-e-erro
+Classifique a causa raiz com um label no formato `tipo::nome`. Exemplos comuns:
+- `tipo::bug` — erro real de código (lógica incorreta, exceção não tratada)
+- `tipo::configuracao` — configuração do sistema inadequada
+- `tipo::dados-cadastrais` — dados incorretos no banco
+- `tipo::prazo-expirado` — funcionalidade bloqueada por prazo/data
+- `tipo::nao-e-erro` — comportamento esperado do sistema
+
+Se nenhum dos exemplos se aplica, crie um label descritivo (ex: `tipo::permissao`, `tipo::integracao`).
+Escreva: CLASSIFICAÇÃO: tipo::nome-escolhido
 
 ### 4. Sugestão de resolução
-Se bug: inclua diff sugerido (antes/depois com arquivo:linha).
-Se não-bug: passos administrativos concretos (Admin > Seção > Campo).
+- Se bug: inclua diff sugerido (antes/depois com arquivo:linha)
+- Se configuração/dados: passos administrativos concretos (quem, onde, o quê)
+- Se prazo expirado: explique o prazo do sistema e como proceder
+- Se não é erro: explique o comportamento esperado
 
-### 5. Plano de simulação
-COPIE este formato exato, preenchendo os valores:
-- **Usuário afetado:** <matrícula ou CPF>
-- **URL do erro:** <path relativo>
-- **Admin para validação:** <username admin>
-- **URL admin:** <path admin relativo>
-- **O que verificar:** <o que confirmar>
+### 5. Plano de verificação
+Para confirmar a análise, indique o que verificar:
+- **Usuário afetado:** matrícula ou CPF do interessado
+- **URL do erro:** path relativo da URL com erro
+- **O que verificar no banco:** dados a consultar para confirmar a hipótese
+- **O que verificar como admin:** ação administrativa para validar
 
 REGRAS:
-- Seja conciso.
-- Não invente código inexistente — use apenas o código fornecido.
-- Use [ENCONTRADO] para evidências e [INFERÊNCIA] para hipóteses.
-- A classificação deve ser baseada na análise do código + descrição do usuário."""
+- Seja conciso e baseie-se apenas no código fornecido
+- Não invente código inexistente
+- Use [ENCONTRADO] para evidências e [INFERÊNCIA] para hipóteses
+- Correlacione sempre a descrição do usuário com o código analisado"""
 
 
 def build_analysis_prompt(result: dict) -> str:

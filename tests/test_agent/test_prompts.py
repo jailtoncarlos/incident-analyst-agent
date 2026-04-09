@@ -107,10 +107,11 @@ def test_analysis_prompt_has_code():
 
 def test_analysis_prompt_has_instructions():
     prompt = build_analysis_prompt(_make_result())
-    assert 'CLASSIFICAÇÃO: tipo::bug' in prompt
+    assert 'tipo::bug' in prompt
     assert 'tipo::configuracao' in prompt
     assert 'tipo::prazo-expirado' in prompt
-    assert 'Plano de simulação' in prompt
+    assert 'Plano de verificação' in prompt
+    assert 'CLASSIFICAÇÃO' in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -158,8 +159,10 @@ def test_extract_tipo_invalid():
     assert extract_tipo_from_analysis('Nenhuma classificação aqui') is None
 
 
-def test_extract_tipo_unknown():
-    assert extract_tipo_from_analysis('tipo::inventado') is None
+def test_extract_tipo_new_label():
+    """LLM pode criar labels novos — devem ser aceitos."""
+    assert extract_tipo_from_analysis('tipo::permissao') == 'tipo::permissao'
+    assert extract_tipo_from_analysis('tipo::integracao') == 'tipo::integracao'
 
 
 # ---------------------------------------------------------------------------

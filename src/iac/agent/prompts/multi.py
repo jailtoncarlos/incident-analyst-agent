@@ -45,7 +45,7 @@ PROMPT_EVIDENCE = """Você pediu para investigar código adicional. Aqui está o
 
 ---
 
-Agora, com base em TODA a evidência (código da view + código adicional acima), responda em português do Brasil com EXATAMENTE estas 5 seções:
+Agora, com base em TODA a evidência (código da view + código adicional acima), responda em português do Brasil com as seguintes seções:
 
 ### 1. Análise do código
 - Fluxo da view em linguagem acessível
@@ -55,27 +55,33 @@ Agora, com base em TODA a evidência (código da view + código adicional acima)
 - Causa raiz do problema reportado pelo usuário
 - Condições em que o erro/situação ocorre
 - Marque com [ENCONTRADO] evidências no código, [INFERÊNCIA] hipóteses
+- Correlacione a descrição do usuário com constantes e campos do código (ex: se o usuário menciona "prazo" ou "tempo", verifique constantes de tempo)
 
 ### 3. Classificação
-Responda com EXATAMENTE UMA destas opções (copie literal):
-- CLASSIFICAÇÃO: tipo::bug
-- CLASSIFICAÇÃO: tipo::configuracao
-- CLASSIFICAÇÃO: tipo::dados-cadastrais
-- CLASSIFICAÇÃO: tipo::prazo-expirado
-- CLASSIFICAÇÃO: tipo::nao-e-erro
+Classifique a causa raiz com um label no formato `tipo::nome`. Exemplos comuns:
+- `tipo::bug` — erro real de código
+- `tipo::configuracao` — configuração inadequada
+- `tipo::dados-cadastrais` — dados incorretos no banco
+- `tipo::prazo-expirado` — funcionalidade bloqueada por prazo/data
+- `tipo::nao-e-erro` — comportamento esperado
+
+Se nenhum se aplica, crie um label descritivo.
+Escreva: CLASSIFICAÇÃO: tipo::nome-escolhido
 
 ### 4. Sugestão de resolução
-Se bug: diff sugerido (antes/depois com arquivo:linha).
-Se não-bug: passos administrativos concretos.
+- Se bug: diff sugerido (antes/depois com arquivo:linha)
+- Se configuração/dados: passos administrativos concretos
+- Se prazo expirado: explique o prazo e como proceder
+- Se não é erro: explique o comportamento esperado
 
-### 5. Plano de simulação
-- **Usuário afetado:** <matrícula ou CPF>
-- **URL do erro:** <path relativo>
-- **Admin para validação:** <username admin>
-- **URL admin:** <path admin relativo>
-- **O que verificar:** <o que confirmar>
+### 5. Plano de verificação
+Para confirmar a análise, indique o que verificar:
+- **Usuário afetado:** matrícula ou CPF do interessado
+- **URL do erro:** path relativo
+- **O que verificar no banco:** dados a consultar para confirmar a hipótese
+- **O que verificar como admin:** ação administrativa para validar
 
-REGRAS: Seja conciso. Use apenas o código fornecido. Não invente código."""
+REGRAS: Seja conciso. Use apenas o código fornecido. Não invente código. Correlacione sempre a descrição do usuário com o código."""
 
 
 def build_investigation_prompt(result: dict) -> str:
