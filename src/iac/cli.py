@@ -48,6 +48,57 @@ def main(verbose: bool):
     logging.getLogger('gitlab').setLevel(logging.WARNING)
 
 
+def _generate_default_artifacts(iac_dir: Path, result: dict) -> None:
+    """Gera artefatos de configuração padrão se não existem."""
+    framework = result.get('framework', 'Python')
+
+    # .env
+    env_file = iac_dir / '.env'
+    if not env_file.exists():
+        env_file.write_text(
+            '# IAC — Variáveis de ambiente\n'
+            '# Preencha e descomente conforme necessário\n'
+            '# Ref: .env.example no repositório do IAC\n\n'
+            '# GITLAB_TOKEN=\n'
+            '# IAC_LLM_BACKEND=groq\n'
+            '# IAC_LLM_MODEL=llama-3.3-70b-versatile\n'
+            '# GROQ_API_KEY=\n'
+            '# IAC_ANALYZE_MODE=multi\n'
+            '# IAC_LLM_RATE_DELAY=30\n',
+            encoding='utf-8',
+        )
+        click.echo('  → .iac/.env (template de configuração)')
+
+    # profile.yaml
+    profile_file = iac_dir / 'profile.yaml'
+    if not profile_file.exists():
+        import yaml
+
+        profile = {
+            'name': iac_dir.parent.name,
+            'system_description': f'{framework}',
+            'rules': [],
+        }
+        with open(profile_file, 'w', encoding='utf-8') as f:
+            yaml.dump(profile, f, default_flow_style=False, allow_unicode=True)
+        click.echo(f'  → .iac/profile.yaml (perfil do projeto: {framework})')
+
+    # logs/
+    log_dir = iac_dir / 'logs'
+    log_dir.mkdir(exist_ok=True)
+
+    # diagrams/
+    diagrams_dir = iac_dir / 'diagrams'
+    if not diagrams_dir.exists():
+        try:
+            from iac.diagram.generator import generate_diagrams
+
+            generate_diagrams(iac_dir)
+            click.echo('  → .iac/diagrams/ (visualizações interativas)')
+        except Exception as e:
+            logging.getLogger(__name__).debug(f'Diagramas não gerados: {e}')
+
+
 @main.command()
 @click.option('--base-dir', type=click.Path(exists=True), default='.', help='Diretório raiz do projeto.')
 @click.option('--force', is_flag=True, help='Re-inspecionar do zero.')
@@ -75,6 +126,9 @@ def init(base_dir: str, force: bool, stats: bool):
     click.echo(f'Inspecionando {base}...')
     result = inspect_project(base, force=force)
     click.echo(f'Inspeção concluída: {result["summary"]}')
+
+    # Gerar artefatos de configuração se não existem
+    _generate_default_artifacts(iac_dir, result)
 
 
 @main.command()
