@@ -193,7 +193,7 @@ Detecção automática pelo nome do modelo via `get_model_profile()`.
 | `single` | `runner.py` | Tudo de uma vez: structural + view + refs + deep (constantes + métodos) | Modelos médios/grandes (14B+) |
 | `multi` | `runner.py` | Prompt 1: structural + view + refs → Prompt 2: evidência + view + deep constants → Prompt 3: resposta | Modelos pequenos (7B) — **acertou `tipo::prazo-expirado`** |
 | `loop` | `loop.py` | Prompt base + iterações incrementais — LLM decide quando parar (max 4) | Experimental ([#45](https://github.com/jailtoncarlos/incident-analyst-agent/issues/45)) |
-| `auto` | — | Seleciona automaticamente pelo perfil do modelo | Default |
+| `auto` | — | small (7B) → `multi`, medium/large (14B+) → `loop` | Default |
 
 ### Modo loop — ações tipadas
 
@@ -263,7 +263,7 @@ Classificação esperada: `tipo::prazo-expirado` (prazo de 10 dias para avaliaç
 
 Detalhes de cada execução: [issue #15](https://github.com/jailtoncarlos/incident-analyst-agent/issues/15).
 
-Nota: modelos 7B são não-determinísticos — mesma entrada pode dar resultados diferentes entre execuções.
+Nota: modelos 7B são não-determinísticos — mesma entrada pode dar resultados diferentes entre execuções. Por isso, `auto` usa `multi` para 7B (mais estável) e `loop` para 14B+ (mais capaz).
 
 ## Qualidade de código
 

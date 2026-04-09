@@ -215,12 +215,17 @@ def analyze(
 
     # 4. Determinar modo e executar LLM
     from iac.agent.loop import run_loop
+    from iac.agent.orchestrator import MODEL_PROFILES, get_model_profile
     from iac.agent.runner import run_multi, run_response, run_single
 
     effective_mode = mode
     if mode == 'auto' and llm:
-        # auto: loop para todos os perfis (substitui multi)
-        effective_mode = 'loop'
+        profile = get_model_profile(llm_model)
+        # small (7B): multi é mais confiável (acertou tipo::prazo-expirado)
+        # medium/large (14B+): loop tem potencial com evidência focal
+        is_small = any(profile is v for k, v in MODEL_PROFILES.items() if k == 'small')
+        effective_mode = 'multi' if is_small else 'loop'
+        logger.info(f'[auto] Perfil {"small" if is_small else "medium/large"} → modo {effective_mode}')
 
     llm_analysis = None
     loop_result = None
