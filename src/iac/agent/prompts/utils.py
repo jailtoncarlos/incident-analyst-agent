@@ -115,6 +115,33 @@ def extract_classificacao(analysis: str) -> dict:
     }
 
 
+# Mapeamento de labels comuns fora do catálogo → label conhecido
+_LABEL_ALIASES = {
+    'tipo::avaliacao-nao-disponivel': 'tipo::prazo-expirado',
+    'tipo::prazo-avaliacao': 'tipo::prazo-expirado',
+    'tipo::tempo-expirado': 'tipo::prazo-expirado',
+    'tipo::tempo-esgotado': 'tipo::prazo-expirado',
+    'tipo::validacao-falhada': 'tipo::bug',
+    'tipo::logica-incorreta': 'tipo::bug',
+    'tipo::excecao-nao-tratada': 'tipo::bug',
+    'tipo::erro-de-codigo': 'tipo::bug',
+    'tipo::acesso-negado': 'tipo::permissao',
+    'tipo::sem-permissao': 'tipo::permissao',
+}
+
+
+def normalize_to_known(tipo: str) -> str | None:
+    """Normaliza label fora do catálogo para o mais próximo conhecido.
+
+    Args:
+        tipo: Label tipo::* fora de KNOWN_TIPOS.
+
+    Returns:
+        Label conhecido ou None se não houver mapeamento.
+    """
+    return _LABEL_ALIASES.get(tipo)
+
+
 def compact_code(source: str) -> str:
     """Compacta código removendo docstrings, comentários e linhas em branco.
 

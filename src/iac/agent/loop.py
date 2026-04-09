@@ -14,7 +14,7 @@ import re
 
 from iac.agent.format import format_context_for_prompt
 from iac.agent.prompts.multi import parse_investigation_requests, resolve_investigation_requests
-from iac.agent.prompts.utils import extract_tipo_from_analysis
+from iac.agent.prompts.utils import KNOWN_TIPOS, extract_tipo_from_analysis, normalize_to_known
 from iac.agent.runner import send_to_llm
 from iac.agent.structural import format_structural_analysis
 
@@ -81,6 +81,19 @@ PROMPT_HISTORY_EMPTY = "Esta é a primeira iteração. Analise o código da view
 
 PROMPT_HISTORY_PREFIX = "## Histórico — o que já foi investigado (NÃO repita)\n\n"
 
+PROMPT_REPAIR = """Sua resposta anterior contém análise mas falta a classificação no formato esperado.
+
+Responda APENAS com:
+
+CLASSIFICAÇÃO: tipo::label-principal
+SUBCLASSIFICAÇÃO: tipo::motivo-especifico
+
+Labels válidos: bug, configuracao, dados-cadastrais, prazo-expirado, nao-e-erro, permissao.
+Se nenhum se aplica, crie um descritivo em kebab-case.
+
+Sua análise anterior:
+{analysis_snippet}"""
+
 
 def run_loop(
     result: dict,
@@ -92,27 +105,13 @@ def run_loop(
     llm_url: str | None,
     llm_key: str | None,
     max_iterations: int = 4,
+    min_iterations: int = 2,
     initial_history: str | None = None,
 ) -> dict:
     """Executa loop interativo de análise.
 
     O LLM decide a cada iteração se precisa de mais informação ou se
     pode concluir. Retorna quando recebe CLASSIFICAR ou atinge max_iterations.
-
-    Args:
-        result: Dict retornado por analyze_issue().
-        structure: Mapa estrutural (.iac/structure.json).
-        graph: Grafo de dependências (.iac/graph.json).
-        base_dir: Diretório raiz do projeto.
-        llm: Backend LLM.
-        llm_model: Nome do modelo.
-        llm_url: Endpoint da API.
-        llm_key: API key.
-        max_iterations: Máximo de iterações do loop.
-        initial_history: Histórico inicial (ex: análise do single como Prompt 0).
-
-    Returns:
-        Dict com analysis (texto), tipo, alteracoes, iterations.
     """
     # Contexto base (não muda entre iterações)
     structural_text = format_structural_analysis(result['structural'])
@@ -175,8 +174,31 @@ def run_loop(
         logger.info(f'[Loop iteração {iteration}] Ação: {action}')
 
         if action == 'CLASSIFICAR':
+            tipo_candidate = extract_tipo_from_analysis(response)
+
+            # Impedir classificação prematura (antes de min_iterations)
+            if iteration < min_iterations and not force_classify:
+                logger.info(f'[Loop iteração {iteration}] CLASSIFICAR prematuro (min_iterations={min_iterations}) — forçando investigação')
+                history_entries.append(
+                    f'**Iteração {iteration} — CLASSIFICAR prematuro**\n\n'
+                    f'Você classificou como `{tipo_candidate}`, mas ainda não investigou o suficiente.\n'
+                    f'Use INVESTIGAR para buscar constantes temporais (ex: TEMPO_AVALIACAO) e métodos relacionados antes de concluir.'
+                )
+                continue
+
+            # Validar taxonomia — normalizar label se fora do catálogo
+            if tipo_candidate and tipo_candidate not in KNOWN_TIPOS:
+                normalized = normalize_to_known(tipo_candidate)
+                if normalized:
+                    logger.info(f'[Loop] Label normalizado: {tipo_candidate} → {normalized}')
+                    tipo_candidate = normalized
+
+            # Se não extraiu tipo, tentar repair prompt
+            if not tipo_candidate:
+                tipo_candidate = _repair_classification(response, llm, llm_model, llm_url, llm_key)
+
             final_analysis = response
-            final_tipo = extract_tipo_from_analysis(response)
+            final_tipo = tipo_candidate
             logger.info(f'[Loop] Classificação final: {final_tipo}')
             break
 
@@ -228,7 +250,13 @@ def run_loop(
         else:
             # Ação não reconhecida — tentar extrair classificação mesmo assim
             tipo = extract_tipo_from_analysis(response)
+            if not tipo:
+                tipo = _repair_classification(response, llm, llm_model, llm_url, llm_key)
             if tipo:
+                if tipo not in KNOWN_TIPOS:
+                    normalized = normalize_to_known(tipo)
+                    if normalized:
+                        tipo = normalized
                 final_analysis = response
                 final_tipo = tipo
                 logger.info(f'[Loop] Classificação implícita: {final_tipo}')
@@ -258,19 +286,27 @@ def _detect_action(response: str) -> str:
     Returns:
         'CLASSIFICAR', 'INVESTIGAR', 'VERIFICAR_BANCO', 'ALTERAR_CODIGO' ou 'DESCONHECIDO'.
     """
+    clean = response.replace('**', '').replace('`', '')
+
     # Procurar AÇÃO: explícita
-    match = re.search(r'AÇÃO:\s*(CLASSIFICAR|INVESTIGAR|VERIFICAR_BANCO|ALTERAR_CODIGO)', response)
+    match = re.search(r'AÇÃO:\s*(CLASSIFICAR|INVESTIGAR|VERIFICAR_BANCO|ALTERAR_CODIGO)', clean)
     if match:
         return match.group(1)
 
     # Inferir pela presença de marcadores
-    if 'CLASSIFICAÇÃO:' in response or 'tipo::' in response:
+    if 'CLASSIFICAÇÃO:' in clean or 'CLASSIFICACAO:' in clean or 'tipo::' in clean:
         return 'CLASSIFICAR'
-    if 'INVESTIGAR:' in response:
+    # CLASSIFICAR sozinho (com ou sem markdown)
+    if re.search(r'^\s*CLASSIFICAR\s*$', clean, re.MULTILINE):
+        return 'CLASSIFICAR'
+    # Seções finais presentes → classificação implícita
+    if '### Análise' in response and '### Resolução' in response:
+        return 'CLASSIFICAR'
+    if 'INVESTIGAR:' in clean:
         return 'INVESTIGAR'
-    if 'VERIFICAR_BANCO' in response or 'CONSULTA:' in response:
+    if 'VERIFICAR_BANCO' in clean or 'CONSULTA:' in clean:
         return 'VERIFICAR_BANCO'
-    if 'ALTERAR_CODIGO' in response or 'ANTES:' in response:
+    if 'ALTERAR_CODIGO' in clean or 'ANTES:' in clean:
         return 'ALTERAR_CODIGO'
 
     return 'DESCONHECIDO'
@@ -288,17 +324,7 @@ def _request_key(req: dict) -> str:
 
 
 def _enrich_on_repeat(req: dict, structure: dict, graph: dict, base_dir) -> str:
-    """Enriquece com métodos relacionados quando LLM repete investigação.
-
-    Args:
-        req: Pedido repetido.
-        structure: Mapa estrutural.
-        graph: Grafo de dependências.
-        base_dir: Diretório raiz.
-
-    Returns:
-        Texto com métodos/propriedades relacionados à constante investigada.
-    """
+    """Enriquece com métodos relacionados quando LLM repete investigação."""
     from pathlib import Path
 
     from iac.agent.tools import ler_funcao
@@ -315,16 +341,34 @@ def _enrich_on_repeat(req: dict, structure: dict, graph: dict, base_dir) -> str:
     methods = model_data.get('methods', {})
     loc_file = model_data.get('file', '')
 
-    # Buscar métodos cujo nome contenha a constante pedida
+    # Buscar métodos cujo nome contenha a constante pedida (limitar a 4)
+    found = 0
     for m_name, m_info in methods.items():
+        if found >= 4:
+            break
         if requested.lower().replace('tempo_', '') in m_name.lower():
             m_line = m_info.get('line')
             if m_line and loc_file:
                 src = ler_funcao(loc_file, m_line, Path(base_dir), max_lines=10)
                 if src:
                     sections.append(f'**`{model_name}.{m_name}`** (linha {m_line}):\n```python\n{src}\n```')
+                    found += 1
 
     return '\n'.join(sections)
+
+
+def _repair_classification(response: str, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> str | None:
+    """Tenta extrair classificação via repair prompt curto."""
+    snippet = response[:1500]
+    prompt = PROMPT_REPAIR.format(analysis_snippet=snippet)
+    logger.info(f'[Loop] Repair prompt: {len(prompt)} chars → enviando ao {llm}')
+    repair_response = send_to_llm(prompt, llm, llm_model, llm_url, llm_key)
+    if not repair_response:
+        return None
+    tipo = extract_tipo_from_analysis(repair_response)
+    if tipo:
+        logger.info(f'[Loop] Repair extraiu: {tipo}')
+    return tipo
 
 
 def _extract_consulta(response: str) -> str:
