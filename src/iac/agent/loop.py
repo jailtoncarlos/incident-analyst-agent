@@ -187,9 +187,19 @@ def run_loop(
                 history_entries.append(f'**Iteração {iteration} — INVESTIGAR**\n\nPedidos: {len(new_requests)}\n\nResultado:\n{evidence}')
                 logger.info(f'[Loop iteração {iteration}] Evidência: {len(evidence)} chars ({len(new_requests)} novos pedidos)')
             elif requests:
-                # Todos os pedidos já foram investigados
-                history_entries.append(f'**Iteração {iteration} — INVESTIGAR** (todos já investigados, avance para CLASSIFICAR)')
-                logger.info(f'[Loop iteração {iteration}] Pedidos repetidos — forçando avanço')
+                # Todos já investigados — escalonar estratégia
+                # Enriquecer com métodos relacionados ao último pedido
+                last_req = requests[0]
+                enrichment = _enrich_on_repeat(last_req, structure, graph, base_dir)
+                hint = (
+                    f'**Iteração {iteration} — INVESTIGAR** (todos já investigados)\n\n'
+                    f'Você já investigou: {", ".join(f"`{m}`" for m in investigated)}.\n\n'
+                )
+                if enrichment:
+                    hint += f'**Enriquecimento automático:**\n{enrichment}\n\n'
+                hint += 'Avance para CLASSIFICAR ou use VERIFICAR_BANCO para confirmar com dados reais.'
+                history_entries.append(hint)
+                logger.info(f'[Loop iteração {iteration}] Pedidos repetidos — escalonando com enriquecimento')
             else:
                 history_entries.append(f'**Iteração {iteration} — INVESTIGAR** (sem pedidos parseáveis)')
 
@@ -270,6 +280,46 @@ def _request_key(req: dict) -> str:
     if req.get('type') == 'form':
         return f'{req.get("app")}.{req.get("form")}'
     return req.get('name', str(req))
+
+
+def _enrich_on_repeat(req: dict, structure: dict, graph: dict, base_dir) -> str:
+    """Enriquece com métodos relacionados quando LLM repete investigação.
+
+    Args:
+        req: Pedido repetido.
+        structure: Mapa estrutural.
+        graph: Grafo de dependências.
+        base_dir: Diretório raiz.
+
+    Returns:
+        Texto com métodos/propriedades relacionados à constante investigada.
+    """
+    from pathlib import Path
+
+    from iac.agent.tools import ler_funcao
+
+    app = req.get('app', '')
+    model_name = req.get('model', '')
+    requested = req.get('method', '')
+    model_data = structure.get('apps', {}).get(app, {}).get('models', {}).get(model_name, {})
+
+    if not model_data or not requested:
+        return ''
+
+    sections = []
+    methods = model_data.get('methods', {})
+    loc_file = model_data.get('file', '')
+
+    # Buscar métodos cujo nome contenha a constante pedida
+    for m_name, m_info in methods.items():
+        if requested.lower().replace('tempo_', '') in m_name.lower():
+            m_line = m_info.get('line')
+            if m_line and loc_file:
+                src = ler_funcao(loc_file, m_line, Path(base_dir), max_lines=10)
+                if src:
+                    sections.append(f'**`{model_name}.{m_name}`** (linha {m_line}):\n```python\n{src}\n```')
+
+    return '\n'.join(sections)
 
 
 def _extract_consulta(response: str) -> str:
