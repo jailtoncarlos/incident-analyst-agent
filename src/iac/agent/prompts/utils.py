@@ -49,16 +49,7 @@ def _normalize_label(raw: str) -> str:
 
 
 def extract_tipo_from_analysis(analysis: str) -> str | None:
-    """Extrai o label de classificação da resposta do LLM.
-
-    Procura padrões como::
-
-        CLASSIFICAÇÃO: tipo::bug
-        CLASSIFICAÇÃO: bug::tempo_habil
-        **CLASSIFICAÇÃO:** Bug::Avaliação Não Preenchida
-        **CLASSIFICAR** CLASSIFICAÇÃO: tipo::prazo-expirado
-
-    Aceita qualquer formato e normaliza para tipo::nome-kebab-case.
+    """Extrai o label principal de classificação da resposta do LLM.
 
     Args:
         analysis: Texto completo da resposta do LLM.
@@ -66,22 +57,62 @@ def extract_tipo_from_analysis(analysis: str) -> str | None:
     Returns:
         Label tipo::* normalizado ou None.
     """
-    # Limpar markdown do texto para facilitar matching
+    result = extract_classificacao(analysis)
+    return result['classificacao']
+
+
+def extract_classificacao(analysis: str) -> dict:
+    """Extrai classificação e subclassificação da resposta do LLM.
+
+    Procura padrões como::
+
+        CLASSIFICAÇÃO: tipo::nao-e-erro
+        SUBCLASSIFICAÇÃO: tipo::prazo-expirado
+
+    Ou formatos alternativos com markdown, prefixos variados, etc.
+
+    Args:
+        analysis: Texto completo da resposta do LLM.
+
+    Returns:
+        Dict com classificacao (str|None) e subclassificacao (str|None).
+    """
     clean = analysis.replace('**', '').replace('`', '')
 
-    # Formato padrão: tipo::nome
-    match = re.search(r'(tipo::[a-z][a-z0-9_-]*)', clean)
-    if match:
-        return match.group(1).strip()
+    classificacao = None
+    subclassificacao = None
 
-    # CLASSIFICAÇÃO: xxx::yyy (qualquer prefixo, qualquer formato de nome)
-    match = re.search(r'CLASSIFICA[CÇ][AÃ]O:\s*(.+?)(?:\n|$)', clean)
+    # Classificação principal
+    match = re.search(r'CLASSIFICA[CÇ][AÃ]O:\s*(.+?)(?:\n|/|$)', clean)
     if match:
         raw = match.group(1).strip()
         if '::' in raw:
-            return _normalize_label(raw)
+            classificacao = _normalize_label(raw)
+        # Checar se tem subclassificação na mesma linha: CLASSIFICAÇÃO: x / SUBCLASSIFICAÇÃO: y
+        sub_inline = re.search(r'SUBCLASSIFICA[CÇ][AÃ]O:\s*(.+?)(?:\n|$)', clean[match.end():])
+        if sub_inline:
+            raw_sub = sub_inline.group(1).strip()
+            if '::' in raw_sub:
+                subclassificacao = _normalize_label(raw_sub)
 
-    return None
+    # Fallback: SUBCLASSIFICAÇÃO em linha separada
+    if not subclassificacao:
+        match_sub = re.search(r'SUBCLASSIFICA[CÇ][AÃ]O:\s*(.+?)(?:\n|$)', clean)
+        if match_sub:
+            raw_sub = match_sub.group(1).strip()
+            if '::' in raw_sub:
+                subclassificacao = _normalize_label(raw_sub)
+
+    # Fallback: tipo::nome no texto (sem CLASSIFICAÇÃO:)
+    if not classificacao:
+        match_tipo = re.search(r'(tipo::[a-z][a-z0-9_-]*)', clean)
+        if match_tipo:
+            classificacao = match_tipo.group(1).strip()
+
+    return {
+        'classificacao': classificacao,
+        'subclassificacao': subclassificacao,
+    }
 
 
 def compact_code(source: str) -> str:

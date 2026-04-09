@@ -64,7 +64,8 @@ MOTIVO: explicação
 **CLASSIFICAR** — concluir a análise:
 ```
 AÇÃO: CLASSIFICAR
-CLASSIFICAÇÃO: tipo::nome
+CLASSIFICAÇÃO: tipo::label-principal
+SUBCLASSIFICAÇÃO: tipo::motivo-especifico
 
 ### Análise
 Causa raiz com [ENCONTRADO] e [INFERÊNCIA].

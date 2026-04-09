@@ -32,15 +32,19 @@ TEMPLATE_ANALYSIS = """### 1. Análise do código
 - Correlacione a descrição do usuário com constantes e campos do código (ex: se o usuário menciona "prazo" ou "tempo", verifique constantes de tempo como TEMPO_AVALIACAO)
 
 ### 3. Classificação
-Classifique a causa raiz com um label no formato `tipo::nome`. Exemplos comuns:
-- `tipo::bug` — erro real de código (lógica incorreta, exceção não tratada)
-- `tipo::configuracao` — configuração do sistema inadequada
-- `tipo::dados-cadastrais` — dados incorretos no banco
-- `tipo::prazo-expirado` — funcionalidade bloqueada por prazo/data
-- `tipo::nao-e-erro` — comportamento esperado do sistema
+Classifique com dois níveis:
 
-Se nenhum dos exemplos se aplica, crie um label descritivo (ex: `tipo::permissao`, `tipo::integracao`).
-Escreva: CLASSIFICAÇÃO: tipo::nome-escolhido
+**CLASSIFICAÇÃO:** label principal — o que é o problema.
+**SUBCLASSIFICAÇÃO:** label secundário — o motivo específico.
+
+Exemplos:
+- CLASSIFICAÇÃO: tipo::bug / SUBCLASSIFICAÇÃO: tipo::logica-incorreta
+- CLASSIFICAÇÃO: tipo::nao-e-erro / SUBCLASSIFICAÇÃO: tipo::prazo-expirado
+- CLASSIFICAÇÃO: tipo::nao-e-erro / SUBCLASSIFICAÇÃO: tipo::configuracao
+- CLASSIFICAÇÃO: tipo::bug / SUBCLASSIFICAÇÃO: tipo::excecao-nao-tratada
+
+Labels comuns: `bug`, `configuracao`, `dados-cadastrais`, `prazo-expirado`, `nao-e-erro`, `permissao`.
+Se nenhum se aplica, crie um descritivo.
 
 ### 4. Sugestão de resolução
 - Se bug: inclua diff sugerido (antes/depois com arquivo:linha)

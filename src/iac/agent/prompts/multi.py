@@ -58,15 +58,16 @@ Agora, com base em TODA a evidência (código da view + código adicional acima)
 - Correlacione a descrição do usuário com constantes e campos do código (ex: se o usuário menciona "prazo" ou "tempo", verifique constantes de tempo)
 
 ### 3. Classificação
-Classifique a causa raiz com um label no formato `tipo::nome`. Exemplos comuns:
-- `tipo::bug` — erro real de código
-- `tipo::configuracao` — configuração inadequada
-- `tipo::dados-cadastrais` — dados incorretos no banco
-- `tipo::prazo-expirado` — funcionalidade bloqueada por prazo/data
-- `tipo::nao-e-erro` — comportamento esperado
+Classifique com dois níveis:
 
-Se nenhum se aplica, crie um label descritivo.
-Escreva: CLASSIFICAÇÃO: tipo::nome-escolhido
+**CLASSIFICAÇÃO:** label principal — o que é o problema.
+**SUBCLASSIFICAÇÃO:** label secundário — o motivo específico.
+
+Exemplos:
+- CLASSIFICAÇÃO: tipo::nao-e-erro / SUBCLASSIFICAÇÃO: tipo::prazo-expirado
+- CLASSIFICAÇÃO: tipo::bug / SUBCLASSIFICAÇÃO: tipo::logica-incorreta
+
+Labels comuns: `bug`, `configuracao`, `dados-cadastrais`, `prazo-expirado`, `nao-e-erro`, `permissao`.
 
 ### 4. Sugestão de resolução
 - Se bug: diff sugerido (antes/depois com arquivo:linha)
