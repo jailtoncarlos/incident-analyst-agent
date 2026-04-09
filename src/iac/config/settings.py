@@ -166,43 +166,60 @@ def get_defaults_dir() -> Path:
 
 
 def load_profile(iac_dir: Path) -> dict:
-    """Carrega profile.yaml do .iac/. Retorna defaults se não existir.
+    """Carrega defaults + profile do projeto com merge.
 
-    Fallback: src/iac/defaults/profile.yaml.
+    Hierarquia: defaults/profile.yaml → .iac/profile.yaml (projeto sobrescreve/amplia).
     """
     import yaml
 
+    # 1. Carregar defaults
+    default_file = get_defaults_dir() / PROFILE_FILE
+    if default_file.exists():
+        with open(default_file, encoding='utf-8') as f:
+            defaults = yaml.safe_load(f) or {}
+    else:
+        defaults = {}
+
+    # 2. Carregar profile do projeto
     profile_file = iac_dir / PROFILE_FILE
-    if not profile_file.exists():
-        # Tentar carregar defaults do pacote
-        default_file = get_defaults_dir() / PROFILE_FILE
-        if default_file.exists():
-            with open(default_file, encoding='utf-8') as f:
-                return _build_profile(yaml.safe_load(f) or {})
-        return _build_profile({})
+    if profile_file.exists():
+        with open(profile_file, encoding='utf-8') as f:
+            project = yaml.safe_load(f) or {}
+    else:
+        project = {}
 
-    with open(profile_file, encoding='utf-8') as f:
-        profile = yaml.safe_load(f) or {}
-
-    return _build_profile(profile)
+    # 3. Merge: defaults + projeto
+    return _merge_profiles(defaults, project)
 
 
-def _build_profile(raw: dict) -> dict:
-    """Constrói profile completo com defaults para campos ausentes."""
+def _merge_profiles(defaults: dict, project: dict) -> dict:
+    """Merge de defaults + profile do projeto.
+
+    Regras:
+    - system_description: projeto sobrescreve default
+    - rules: projeto sobrescreve (lista inteira)
+    - taxonomy.known_tipos: união (default + projeto)
+    - taxonomy.aliases: merge (default + projeto, projeto tem prioridade)
+    """
     profile = {
-        'name': raw.get('name', ''),
-        'system_description': raw.get('system_description', 'Django'),
-        'rules': raw.get('rules', []),
+        'name': project.get('name') or defaults.get('name', ''),
+        'system_description': project.get('system_description') or defaults.get('system_description', 'Django'),
+        'rules': project.get('rules') if project.get('rules') is not None else defaults.get('rules', []),
     }
 
-    # Taxonomia: merge com defaults
-    taxonomy = raw.get('taxonomy', {})
-    known = taxonomy.get('known_tipos')
-    aliases = taxonomy.get('aliases')
+    # Taxonomia: merge
+    def_tax = defaults.get('taxonomy', {})
+    proj_tax = project.get('taxonomy', {})
+
+    def_known = set(def_tax.get('known_tipos', DEFAULT_KNOWN_TIPOS))
+    proj_known = set(proj_tax.get('known_tipos', []))
+
+    def_aliases = dict(def_tax.get('aliases', DEFAULT_ALIASES))
+    proj_aliases = dict(proj_tax.get('aliases', {}))
 
     profile['taxonomy'] = {
-        'known_tipos': set(known) if known else set(DEFAULT_KNOWN_TIPOS),
-        'aliases': dict(aliases) if aliases else dict(DEFAULT_ALIASES),
+        'known_tipos': def_known | proj_known,
+        'aliases': {**def_aliases, **proj_aliases},
     }
 
     return profile
