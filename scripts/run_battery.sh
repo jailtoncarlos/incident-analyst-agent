@@ -15,7 +15,7 @@
 #   - .iac/.env configurado (GITLAB_TOKEN, IAC_LLM_BACKEND, API key)
 #   - iac instalado (pip install -e .)
 
-set -euo pipefail
+set -uo pipefail
 
 # ---------------------------------------------------------------------------
 # Argumentos
@@ -125,21 +125,29 @@ for MODEL in "${MODEL_LIST[@]}"; do
         echo "--- [$CURRENT/$TOTAL_SCENARIOS] $DIR_NAME $MODE ---"
 
         # Executar análise
-        OUTPUT=$(iac analyze \
+        if OUTPUT=$(iac analyze \
             --base-dir "$BASE_DIR" \
             --issue-url "$ISSUE_URL" \
             --llm "$BACKEND" \
             --llm-model "$MODEL" \
-            --mode "$MODE" 2>&1)
+            --mode "$MODE" 2>&1); then
+            STATUS=0
+        else
+            STATUS=$?
+        fi
 
         # Extrair classificação do output
         CLASSIFICACAO=$(echo "$OUTPUT" | grep "^Classificação:" | head -1 || true)
         SUBCLASSIFICACAO=$(echo "$OUTPUT" | grep "^Subclassificação:" | head -1 || true)
         LABELS=$(echo "$OUTPUT" | grep "^Labels sugeridos:" | head -1 || true)
 
-        echo "  $CLASSIFICACAO"
-        [[ -n "$SUBCLASSIFICACAO" ]] && echo "  $SUBCLASSIFICACAO"
-        echo "  $LABELS"
+        if [[ "$STATUS" -eq 0 ]]; then
+            echo "  $CLASSIFICACAO"
+            [[ -n "$SUBCLASSIFICACAO" ]] && echo "  $SUBCLASSIFICACAO"
+            echo "  $LABELS"
+        else
+            echo "  Falha no cenário (exit=$STATUS)"
+        fi
 
         # Mover log gerado
         LATEST_LOG=$(ls -t "$LOGS_DIR"/iac_2026*.log 2>/dev/null | head -1)
@@ -148,7 +156,11 @@ for MODEL in "${MODEL_LIST[@]}"; do
         fi
 
         # Registrar resultado
-        RESULTS+="| $DIR_NAME | $MODE | $CLASSIFICACAO | $LABELS |\n"
+        if [[ "$STATUS" -eq 0 ]]; then
+            RESULTS+="| $DIR_NAME | $MODE | $CLASSIFICACAO | $LABELS |\n"
+        else
+            RESULTS+="| $DIR_NAME | $MODE | FALHA (exit=$STATUS) | - |\n"
+        fi
     done
     echo ""
 done
