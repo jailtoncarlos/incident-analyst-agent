@@ -63,7 +63,9 @@ REGRAS:
 - Seja conciso e baseie-se apenas no código fornecido
 - Não invente código inexistente
 - Use [ENCONTRADO] para evidências e [INFERÊNCIA] para hipóteses
-- Correlacione sempre a descrição do usuário com o código analisado"""
+- Correlacione sempre a descrição do usuário com o código analisado
+- Se o interessado é Aluno e a view é de área discente, não assuma erro de permissão a menos que haja evidência explícita de exceção/acesso negado
+- Se a descrição menciona "tempo", "prazo", "hábil" ou "período", priorize investigar constantes temporais (TEMPO_*, PRAZO_*, DIAS_*)"""
 
 
 def build_analysis_prompt(result: dict, include_deep: bool = True) -> str:

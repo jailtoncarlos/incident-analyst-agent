@@ -35,6 +35,8 @@ Analise o que você já sabe e escolha UMA ação.
 ## Regras importantes
 - NÃO repita investigações já feitas (veja o histórico acima)
 - Se já tem código + constantes + descrição do usuário, avance para CLASSIFICAR
+- Se o interessado é Aluno e a view é de área discente, não assuma erro de permissão sem evidência explícita
+- Se a descrição menciona "tempo", "prazo", "hábil" ou "período", priorize constantes temporais (TEMPO_*, PRAZO_*, DIAS_*)
 - Correlacione a descrição do usuário com constantes do código (ex: "tempo hábil" → TEMPO_AVALIACAO)
 - Se precisa confirmar com dados reais, use VERIFICAR_BANCO (não INVESTIGAR)
 

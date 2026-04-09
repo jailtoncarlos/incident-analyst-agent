@@ -82,7 +82,11 @@ Para confirmar a análise, indique o que verificar:
 - **O que verificar no banco:** dados a consultar para confirmar a hipótese
 - **O que verificar como admin:** ação administrativa para validar
 
-REGRAS: Seja conciso. Use apenas o código fornecido. Não invente código. Correlacione sempre a descrição do usuário com o código."""
+REGRAS:
+- Seja conciso. Use apenas o código fornecido. Não invente código.
+- Correlacione sempre a descrição do usuário com o código.
+- Se o interessado é Aluno e a view é de área discente, não assuma erro de permissão sem evidência explícita.
+- Se a descrição menciona "tempo", "prazo", "hábil" ou "período", priorize constantes temporais (TEMPO_*, PRAZO_*, DIAS_*)."""
 
 
 def build_investigation_prompt(result: dict) -> str:
