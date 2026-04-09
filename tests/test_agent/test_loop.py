@@ -5,7 +5,7 @@ _request_key, detecção de repetição.
 """
 
 from iac.agent.loop import _detect_action, _request_key
-from iac.agent.prompts.utils import _normalize_label, extract_tipo_from_analysis
+from iac.agent.prompts.utils import _normalize_label, extract_tipo_from_analysis, normalize_to_known
 
 
 # ---------------------------------------------------------------------------
@@ -113,3 +113,56 @@ def test_request_key_model():
 def test_request_key_symbol():
     key = _request_key({'type': 'symbol', 'name': 'SomeSymbol'})
     assert key == 'SomeSymbol'
+
+
+# ---------------------------------------------------------------------------
+# _detect_action — variantes de CLASSIFICAR (#52)
+# ---------------------------------------------------------------------------
+
+
+def test_detect_classificar_markdown():
+    """CLASSIFICAR com bold markdown — deve reconhecer."""
+    assert _detect_action('**AÇÃO: CLASSIFICAR**\n**CLASSIFICAÇÃO:** tipo::bug') == 'CLASSIFICAR'
+
+
+def test_detect_classificar_solo():
+    """CLASSIFICAR sozinho em linha — deve reconhecer."""
+    assert _detect_action('Análise completa.\n\nCLASSIFICAR\n\nO problema é...') == 'CLASSIFICAR'
+
+
+def test_detect_classificar_sections():
+    """Seções ### Análise + ### Resolução sem AÇÃO: — deve inferir CLASSIFICAR."""
+    response = '### Análise\nCausa raiz...\n### Resolução\nCorrigir...'
+    assert _detect_action(response) == 'CLASSIFICAR'
+
+
+def test_detect_classificacao_without_accents():
+    """CLASSIFICACAO sem acento — deve reconhecer."""
+    assert _detect_action('CLASSIFICACAO: tipo::prazo-expirado') == 'CLASSIFICAR'
+
+
+# ---------------------------------------------------------------------------
+# normalize_to_known — taxonomia (#52)
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_avaliacao_nao_disponivel():
+    assert normalize_to_known('tipo::avaliacao-nao-disponivel') == 'tipo::prazo-expirado'
+
+
+def test_normalize_logica_incorreta():
+    assert normalize_to_known('tipo::logica-incorreta') == 'tipo::bug'
+
+
+def test_normalize_acesso_negado():
+    assert normalize_to_known('tipo::acesso-negado') == 'tipo::permissao'
+
+
+def test_normalize_unknown_returns_none():
+    assert normalize_to_known('tipo::algo-desconhecido') is None
+
+
+def test_normalize_known_tipo_not_aliased():
+    """Labels já conhecidos não precisam de alias."""
+    assert normalize_to_known('tipo::bug') is None
+    assert normalize_to_known('tipo::prazo-expirado') is None

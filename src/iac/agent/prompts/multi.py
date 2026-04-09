@@ -132,6 +132,14 @@ def parse_investigation_requests(llm_response: str) -> list[dict]:
         if '/templates/' in target or target.endswith('.html'):
             logger.debug(f'Pedido ignorado (template): {target}')
             continue
+        # Rejeitar expressões encadeadas (request.user.get_relacionamento().matricula)
+        if '()' in target or target.count('.') > 4:
+            logger.debug(f'Pedido ignorado (expressão complexa): {target}')
+            continue
+        # Rejeitar query fragments (Model.filter(...), Model.objects.get(...))
+        if re.search(r'\.(filter|objects|get|exclude|annotate|aggregate)\b', target):
+            logger.debug(f'Pedido ignorado (query fragment): {target}')
+            continue
 
         parts = target.split('.')
         if len(parts) >= 4 and parts[1] == 'models':

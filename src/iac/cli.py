@@ -12,6 +12,7 @@ Uso:
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -81,12 +82,13 @@ def init(base_dir: str, force: bool, stats: bool):
 @click.option('--title', type=str, default=None, help='Título do incidente.')
 @click.option('--description', type=str, default=None, help='Descrição do incidente.')
 @click.option('--base-dir', type=click.Path(exists=True), default='.', help='Diretório raiz do projeto.')
-@click.option('--llm', type=click.Choice(['ollama', 'gemini']), default=None, help='Backend LLM.')
-@click.option('--llm-url', type=str, default=None, help='Endpoint do LLM.')
-@click.option('--llm-key', type=str, default=None, help='API key do LLM.')
-@click.option('--llm-model', type=str, default=None, help='Modelo do LLM (default: config.yaml ou qwen2.5:7b).')
-@click.option('--gitlab-token', type=str, envvar='GITLAB_TOKEN', default=None, help='Token GitLab.')
-@click.option('--mode', type=click.Choice(['auto', 'single', 'multi', 'loop']), default='auto', help='Modo: auto, single (1 prompt), multi (3 prompts fixos), loop (iterativo, LLM decide).')
+@click.option('--llm', type=click.Choice(['ollama', 'groq', 'deepseek', 'gemini']), envvar='IAC_LLM_BACKEND', default=None, help='Backend LLM (env: IAC_LLM_BACKEND).')
+@click.option('--llm-url', type=str, envvar='IAC_LLM_URL', default=None, help='Endpoint do LLM (env: IAC_LLM_URL).')
+@click.option('--llm-key', type=str, default=None, help='API key do LLM (env: GROQ_API_KEY, GEMINI_API_KEY).')
+@click.option('--llm-model', type=str, envvar='IAC_LLM_MODEL', default=None, help='Modelo do LLM (env: IAC_LLM_MODEL).')
+@click.option('--gitlab-token', type=str, envvar='GITLAB_TOKEN', default=None, help='Token GitLab (env: GITLAB_TOKEN).')
+@click.option('--mode', type=click.Choice(['auto', 'single', 'multi', 'loop']), envvar='IAC_ANALYZE_MODE', default=None, help='Modo (env: IAC_ANALYZE_MODE).')
+@click.option('--env-file', type=click.Path(), default=None, help='Caminho para .env (default: .iac/.env).')
 @click.option('--dry-run', is_flag=True, help='Não posta comentários nem aplica labels.')
 @click.option('--post', is_flag=True, help='Postar análise como comentário na issue.')
 def analyze(
@@ -100,6 +102,7 @@ def analyze(
     llm_model: str,
     gitlab_token: str,
     mode: str,
+    env_file: str,
     dry_run: bool,
     post: bool,
 ):
@@ -107,6 +110,16 @@ def analyze(
     if not issue_url and not title and not description:
         click.echo('Informe --issue-url, --title ou --description.')
         sys.exit(1)
+
+    # Carregar .env se informado via --env-file
+    if env_file:
+        from dotenv import load_dotenv
+        env_path = Path(env_file)
+        if env_path.exists():
+            load_dotenv(env_path, override=False)
+        else:
+            click.echo(f'Arquivo .env não encontrado: {env_file}')
+            sys.exit(1)
 
     base = Path(base_dir).resolve()
     iac_dir = base / IAC_DIR
@@ -130,7 +143,7 @@ def analyze(
     # Root logger precisa estar em DEBUG para o FileHandler receber tudo
     root_logger.setLevel(logging.DEBUG)
     from iac.agent.orchestrator import analyze_issue, format_structural_analysis
-    from iac.agent.prompts import extract_tipo_from_analysis
+    from iac.agent.prompts import extract_classificacao
 
     # Configuração efetiva: config.yaml + CLI args
     cfg = get_effective_config(iac_dir, {
@@ -138,15 +151,13 @@ def analyze(
         'gitlab_token': gitlab_token, 'mode': mode,
     })
 
-    # Aplicar config — llm só é ativado se passado via --llm
-    # config.yaml define o default quando --llm é passado, não ativa automaticamente
+    # Resolução: CLI args (já com envvar via click) → config.yaml → defaults
+    llm = llm or cfg['llm'].get('backend')
     llm_model = llm_model or cfg['llm'].get('model') or 'qwen2.5:7b'
-    if llm and not llm_model:
-        llm_model = cfg['llm']['model']
     llm_url = llm_url or cfg['llm'].get('url')
-    llm_key = llm_key or cfg['llm'].get('key')
-    gitlab_token = gitlab_token or cfg['gitlab'].get('token')
-    mode = cfg['analyze'].get('mode', mode)
+    llm_key = llm_key or cfg['llm'].get('key') or os.environ.get('GROQ_API_KEY') or os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('GEMINI_API_KEY')
+    gitlab_token = gitlab_token or cfg['gitlab'].get('token') or os.environ.get('GITLAB_TOKEN')
+    mode = mode or cfg['analyze'].get('mode') or 'auto'
 
     structure = load_structure(iac_dir)
     graph = load_graph(iac_dir)
@@ -187,6 +198,18 @@ def analyze(
         description = ''
 
     # Log dos argumentos de entrada
+    # Validar API key para backends que exigem
+    if llm in ('groq', 'deepseek', 'gemini') and not llm_key:
+        env_vars = {'groq': 'GROQ_API_KEY', 'deepseek': 'DEEPSEEK_API_KEY', 'gemini': 'GEMINI_API_KEY'}
+        click.echo(f'API key necessária para {llm}. Use --llm-key, {env_vars[llm]} ou .iac/.env.')
+        sys.exit(1)
+
+    # URL default por backend (se não informado)
+    if llm == 'groq' and (not llm_url or 'localhost' in llm_url):
+        llm_url = 'https://api.groq.com/openai/v1/chat/completions'
+    elif llm == 'deepseek' and (not llm_url or 'localhost' in llm_url):
+        llm_url = 'https://api.deepseek.com/v1/chat/completions'
+
     logger.info('=== iac analyze iniciado ===')
     logger.info(f'Base dir: {base}')
     logger.info(f'Issue URL: {issue_url or "(não informado)"}')
@@ -257,14 +280,22 @@ def analyze(
         click.echo('\n--- Análise do LLM ---\n')
         click.echo(llm_analysis)
 
-        tipo = loop_result.get('tipo') if loop_result else extract_tipo_from_analysis(llm_analysis)
+        classificacao = extract_classificacao(llm_analysis)
+        tipo = loop_result.get('tipo') if loop_result else classificacao['classificacao']
+        subtipo = classificacao.get('subclassificacao')
+
         if tipo:
             click.echo(f'\nClassificação: {tipo}')
             result['classification']['tipo_sugerido'] = tipo
             if tipo not in result['classification']['labels_sugeridos']:
                 result['classification']['labels_sugeridos'].append(tipo)
+        if subtipo:
+            click.echo(f'Subclassificação: {subtipo}')
+            result['classification']['subtipo_sugerido'] = subtipo
+            if subtipo not in result['classification']['labels_sugeridos']:
+                result['classification']['labels_sugeridos'].append(subtipo)
 
-        logger.info(f'[Resultado] Classificação: tipo={tipo}, labels={result["classification"].get("labels_sugeridos", [])}')
+        logger.info(f'[Resultado] Classificação: tipo={tipo}, subtipo={subtipo}, labels={result["classification"].get("labels_sugeridos", [])}')
 
         if result['classification'].get('interessado'):
             click.echo('\nGerando resposta ao usuário...')

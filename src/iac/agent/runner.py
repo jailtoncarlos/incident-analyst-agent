@@ -7,9 +7,11 @@ Encapsula a lógica de envio de prompts e processamento de respostas.
 from __future__ import annotations
 
 import logging
+import os
 import time
 
 from iac.agent.format import format_context_for_prompt
+from iac.agent.orchestrator import get_model_profile
 from iac.agent.prompts import (
     _strip_context_header,
     build_analysis_prompt,
@@ -24,25 +26,35 @@ from iac.agent.prompts import (
 logger = logging.getLogger(__name__)
 
 
+_LLM_RATE_DELAY = int(os.environ.get('IAC_LLM_RATE_DELAY', '0'))
+_LLM_MAX_RETRIES = int(os.environ.get('IAC_LLM_MAX_RETRIES', '3'))
+
+
 def send_to_llm(prompt: str, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> str | None:
     """Envia prompt ao backend LLM configurado.
 
-    Args:
-        prompt: Texto do prompt.
-        llm: Backend ('ollama' ou 'gemini').
-        llm_model: Nome do modelo.
-        llm_url: Endpoint da API.
-        llm_key: API key.
-
-    Returns:
-        Texto da resposta ou None.
+    Rate delay e retries são controlados por variáveis de ambiente:
+        IAC_LLM_RATE_DELAY — delay em segundos entre chamadas (default: 0)
+        IAC_LLM_MAX_RETRIES — máximo de retries (default: 3)
     """
+    if _LLM_RATE_DELAY > 0 and llm != 'ollama':
+        logger.debug(f'[LLM] Rate delay: {_LLM_RATE_DELAY}s')
+        time.sleep(_LLM_RATE_DELAY)
+
     t0 = time.time()
     result = None
     if llm == 'ollama':
         from iac.integrations import ollama
         url = llm_url or 'http://localhost:11434/v1/chat/completions'
         result = ollama.chat(prompt, url=url, model=llm_model, api_key=llm_key)
+    elif llm == 'groq':
+        from iac.integrations import groq
+        url = llm_url or groq.DEFAULT_URL
+        result = groq.chat(prompt, url=url, model=llm_model, api_key=llm_key)
+    elif llm == 'deepseek':
+        from iac.integrations import deepseek
+        url = llm_url or deepseek.DEFAULT_URL
+        result = deepseek.chat(prompt, url=url, model=llm_model, api_key=llm_key)
     elif llm == 'gemini':
         from iac.integrations import gemini
         if not llm_url or not llm_key:
@@ -50,30 +62,41 @@ def send_to_llm(prompt: str, llm: str, llm_model: str, llm_url: str | None, llm_
             return None
         result = gemini.chat(prompt, url=llm_url, api_key=llm_key)
     elapsed = time.time() - t0
-    logger.info(f'[LLM] send_to_llm: {len(result or "")} chars em {elapsed:.1f}s')
+    if result == 'PROMPT_TOO_LARGE':
+        logger.warning(f'[LLM] send_to_llm: prompt muito grande em {elapsed:.1f}s')
+        return 'PROMPT_TOO_LARGE'
+    if result:
+        logger.info(f'[LLM] send_to_llm: {len(result)} chars em {elapsed:.1f}s')
+    else:
+        logger.warning(f'[LLM] send_to_llm: sem resposta em {elapsed:.1f}s (possível timeout ou erro de conexão)')
     return result
 
 
 def run_single(result: dict, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> str | None:
-    """Executa análise em modo single-prompt.
+    """Executa análise em modo single-prompt com ajuste progressivo.
 
-    Args:
-        result: Dict retornado por analyze_issue().
-        llm: Backend LLM.
-        llm_model: Nome do modelo.
-        llm_url: Endpoint da API.
-        llm_key: API key.
-
-    Returns:
-        Texto da análise do LLM ou None.
+    Se o prompt for grande demais (413), reduz progressivamente:
+    1. Com deep → 2. Sem deep → 3. Desiste.
     """
-    prompt = build_analysis_prompt(result)
-    logger.info(f'[LLM] Modo single-prompt: {len(prompt)} chars → enviando ao {llm} ({llm_model})')
-    logger.debug(f'[LLM] Prompt (single) conteúdo:\n{prompt}')
+    profile = get_model_profile(llm_model)
+    include_deep = profile.get('deep_include_methods', True)
+    prompt = build_analysis_prompt(result, include_deep=include_deep)
+    logger.info(f'[LLM] Modo single-prompt: {len(prompt)} chars (deep={include_deep}) → enviando ao {llm} ({llm_model})')
 
     analysis = send_to_llm(prompt, llm, llm_model, llm_url, llm_key)
+
+    # Ajuste progressivo: se prompt grande demais, reduzir
+    if analysis == 'PROMPT_TOO_LARGE' and include_deep:
+        logger.info('[LLM] Prompt muito grande — retentando sem deep')
+        prompt = build_analysis_prompt(result, include_deep=False)
+        logger.info(f'[LLM] Modo single-prompt (sem deep): {len(prompt)} chars → enviando ao {llm} ({llm_model})')
+        analysis = send_to_llm(prompt, llm, llm_model, llm_url, llm_key)
+
+    if analysis == 'PROMPT_TOO_LARGE':
+        logger.error('[LLM] Prompt ainda muito grande mesmo sem deep — modelo não suporta este tamanho')
+        return None
+
     logger.info(f'[LLM] Resposta (single): {len(analysis or "")} chars')
-    logger.debug(f'[LLM] Resposta (single) conteúdo:\n{analysis}')
     return analysis
 
 

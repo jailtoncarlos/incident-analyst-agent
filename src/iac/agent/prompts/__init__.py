@@ -21,4 +21,5 @@ from iac.agent.prompts.utils import (  # noqa: F401
     compact_code,
     extract_classificacao,
     extract_tipo_from_analysis,
+    normalize_to_known,
 )

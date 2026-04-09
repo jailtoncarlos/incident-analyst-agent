@@ -66,11 +66,12 @@ REGRAS:
 - Correlacione sempre a descrição do usuário com o código analisado"""
 
 
-def build_analysis_prompt(result: dict) -> str:
+def build_analysis_prompt(result: dict, include_deep: bool = True) -> str:
     """Constrói o prompt de análise completo (modo single-prompt).
 
     Args:
         result: Dict retornado por analyze_issue() com structural, context e deep.
+        include_deep: Se False, omite a análise profunda do prompt (útil para modelos pequenos).
 
     Returns:
         Prompt completo para enviar ao LLM.
@@ -86,12 +87,13 @@ def build_analysis_prompt(result: dict) -> str:
         sections.append('\n---\n')
         sections.append(context_text)
 
-    deep = result.get('deep', [])
-    if deep:
-        deep_text = format_deep_analysis(deep)
-        if deep_text.strip():
-            sections.append('\n---\n')
-            sections.append(deep_text)
+    if include_deep:
+        deep = result.get('deep', [])
+        if deep:
+            deep_text = format_deep_analysis(deep)
+            if deep_text.strip():
+                sections.append('\n---\n')
+                sections.append(deep_text)
 
     sections.append('\n---\n')
     sections.append(TEMPLATE_ANALYSIS)
