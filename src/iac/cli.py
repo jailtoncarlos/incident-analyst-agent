@@ -86,16 +86,28 @@ def _generate_default_artifacts(iac_dir: Path, result: dict) -> None:
     log_dir = iac_dir / 'logs'
     log_dir.mkdir(exist_ok=True)
 
-    # diagrams/
-    diagrams_dir = iac_dir / 'diagrams'
-    if not diagrams_dir.exists():
-        try:
-            from iac.diagram.generator import generate_diagrams
+    # diagrams/ — overview + detalhe por app
+    try:
+        from iac.config.settings import load_structure
+        from iac.diagram.generator import generate_app_detail_data, generate_overview_data, write_html
 
-            generate_diagrams(iac_dir)
-            click.echo('  → .iac/diagrams/ (visualizações interativas)')
-        except Exception as e:
-            logging.getLogger(__name__).debug(f'Diagramas não gerados: {e}')
+        diagrams_dir = iac_dir / 'diagrams'
+        count = 0
+
+        data = generate_overview_data(iac_dir)
+        write_html(diagrams_dir / 'overview.html', 'overview.html', data)
+        count += 1
+
+        structure = load_structure(iac_dir)
+        for app_name in structure.get('apps', {}):
+            app_data = generate_app_detail_data(iac_dir, app_name)
+            if app_data['nodes']:
+                write_html(diagrams_dir / f'{app_name}.html', 'app_detail.html', app_data)
+                count += 1
+
+        click.echo(f'  → .iac/diagrams/ ({count} visualizações interativas)')
+    except Exception as e:
+        logging.getLogger(__name__).debug(f'Diagramas não gerados: {e}')
 
 
 @main.command()
