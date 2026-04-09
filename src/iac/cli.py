@@ -297,12 +297,15 @@ def analyze(
 
         logger.info(f'[Resultado] Classificação: tipo={tipo}, subtipo={subtipo}, labels={result["classification"].get("labels_sugeridos", [])}')
 
-        if result['classification'].get('interessado'):
-            click.echo('\nGerando resposta ao usuário...')
+        if result['classification'].get('interessado') and tipo:
+            click.echo('\nGerando relatório técnico...')
             response_text = run_response(result, llm_analysis, llm, llm_model, llm_url, llm_key)
             if response_text:
-                click.echo('\n--- Rascunho de resposta ---\n')
+                click.echo('\n--- Relatório técnico ---\n')
                 click.echo(response_text)
+        elif not tipo:
+            logger.warning('[LLM] Classificação inconclusiva — relatório técnico não gerado')
+            click.echo('\nClassificação inconclusiva — relatório técnico não gerado.')
     elif llm:
         logger.warning('[LLM] Nenhuma resposta do LLM')
         click.echo('LLM não retornou resposta.')

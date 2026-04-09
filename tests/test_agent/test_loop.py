@@ -5,7 +5,12 @@ _request_key, detecção de repetição.
 """
 
 from iac.agent.loop import _detect_action, _request_key
-from iac.agent.prompts.utils import _normalize_label, extract_tipo_from_analysis, normalize_to_known
+from iac.agent.prompts.utils import (
+    _normalize_label,
+    extract_classificacao,
+    extract_tipo_from_analysis,
+    normalize_to_known,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -166,3 +171,52 @@ def test_normalize_known_tipo_not_aliased():
     """Labels já conhecidos não precisam de alias."""
     assert normalize_to_known('tipo::bug') is None
     assert normalize_to_known('tipo::prazo-expirado') is None
+
+
+def test_normalize_tempo_aliases():
+    """Labels temporais criativos devem normalizar para prazo-expirado."""
+    assert normalize_to_known('tipo::tempo-de-execucao-insuficiente') == 'tipo::prazo-expirado'
+    assert normalize_to_known('tipo::tempo-habil-para-avaliacao') == 'tipo::prazo-expirado'
+    assert normalize_to_known('tipo::tempo-de-avaliacao-insuficiente') == 'tipo::prazo-expirado'
+
+
+def test_normalize_comportamento_esperado():
+    assert normalize_to_known('tipo::comportamento-esperado') == 'tipo::nao-e-erro'
+
+
+# ---------------------------------------------------------------------------
+# extract_classificacao — labels sem prefixo tipo:: (#57 melhoria 2)
+# ---------------------------------------------------------------------------
+
+
+def test_extract_bare_label_bug():
+    """CLASSIFICAÇÃO: bug (sem tipo::) deve resolver para tipo::bug."""
+    result = extract_classificacao('CLASSIFICAÇÃO: bug\nSUBCLASSIFICAÇÃO: logica-incorreta')
+    assert result['classificacao'] == 'tipo::bug'
+    assert result['subclassificacao'] == 'tipo::bug'  # logica-incorreta → bug via alias
+
+
+def test_extract_bare_label_nao_e_erro():
+    """CLASSIFICAÇÃO: nao-e-erro → tipo::nao-e-erro."""
+    result = extract_classificacao('CLASSIFICAÇÃO: nao-e-erro')
+    assert result['classificacao'] == 'tipo::nao-e-erro'
+
+
+def test_extract_bare_label_permissao():
+    """CLASSIFICAÇÃO: permissao → tipo::permissao."""
+    result = extract_classificacao('CLASSIFICAÇÃO: permissao')
+    assert result['classificacao'] == 'tipo::permissao'
+
+
+def test_extract_subclassificacao_normalized():
+    """Subclassificação fora do catálogo deve ser normalizada."""
+    result = extract_classificacao('CLASSIFICAÇÃO: tipo::nao-e-erro\nSUBCLASSIFICAÇÃO: tipo::comportamento-esperado')
+    assert result['classificacao'] == 'tipo::nao-e-erro'
+    assert result['subclassificacao'] == 'tipo::nao-e-erro'  # comportamento-esperado → nao-e-erro
+
+
+def test_extract_subclassificacao_prazo():
+    """Subclassificação prazo-expirado ou alias deve normalizar."""
+    result = extract_classificacao('CLASSIFICAÇÃO: tipo::nao-e-erro\nSUBCLASSIFICAÇÃO: tipo::prazo-expirado')
+    assert result['classificacao'] == 'tipo::nao-e-erro'
+    assert result['subclassificacao'] == 'tipo::prazo-expirado'  # já é known, mantém

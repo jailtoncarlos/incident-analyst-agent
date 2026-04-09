@@ -11,6 +11,22 @@ KNOWN_TIPOS = {
     'tipo::dados-cadastrais',
     'tipo::prazo-expirado',
     'tipo::nao-e-erro',
+    'tipo::permissao',
+}
+
+# Labels "nus" (sem tipo::) aceitos pelo parser — mapeiam para tipo::*
+_BARE_LABELS = {
+    'bug': 'tipo::bug',
+    'configuracao': 'tipo::configuracao',
+    'configuração': 'tipo::configuracao',
+    'dados-cadastrais': 'tipo::dados-cadastrais',
+    'prazo-expirado': 'tipo::prazo-expirado',
+    'nao-e-erro': 'tipo::nao-e-erro',
+    'não é erro': 'tipo::nao-e-erro',
+    'permissao': 'tipo::permissao',
+    'permissão': 'tipo::permissao',
+    'logica-incorreta': 'tipo::bug',
+    'comportamento-esperado': 'tipo::nao-e-erro',
 }
 
 
@@ -86,22 +102,17 @@ def extract_classificacao(analysis: str) -> dict:
     match = re.search(r'CLASSIFICA[CÇ][AÃ]O:\s*(.+?)(?:\n|/|$)', clean)
     if match:
         raw = match.group(1).strip()
-        if '::' in raw:
-            classificacao = _normalize_label(raw)
-        # Checar se tem subclassificação na mesma linha: CLASSIFICAÇÃO: x / SUBCLASSIFICAÇÃO: y
+        classificacao = _resolve_label(raw)
+        # Checar subclassificação inline ou em linhas seguintes
         sub_inline = re.search(r'SUBCLASSIFICA[CÇ][AÃ]O:\s*(.+?)(?:\n|$)', clean[match.end():])
         if sub_inline:
-            raw_sub = sub_inline.group(1).strip()
-            if '::' in raw_sub:
-                subclassificacao = _normalize_label(raw_sub)
+            subclassificacao = _resolve_label(sub_inline.group(1).strip())
 
     # Fallback: SUBCLASSIFICAÇÃO em linha separada
     if not subclassificacao:
         match_sub = re.search(r'SUBCLASSIFICA[CÇ][AÃ]O:\s*(.+?)(?:\n|$)', clean)
         if match_sub:
-            raw_sub = match_sub.group(1).strip()
-            if '::' in raw_sub:
-                subclassificacao = _normalize_label(raw_sub)
+            subclassificacao = _resolve_label(match_sub.group(1).strip())
 
     # Fallback: tipo::nome no texto (sem CLASSIFICAÇÃO:)
     if not classificacao:
@@ -109,22 +120,58 @@ def extract_classificacao(analysis: str) -> dict:
         if match_tipo:
             classificacao = match_tipo.group(1).strip()
 
+    # Normalizar subclassificação para labels conhecidos
+    if subclassificacao and subclassificacao not in KNOWN_TIPOS:
+        normalized = normalize_to_known(subclassificacao)
+        if normalized:
+            subclassificacao = normalized
+
     return {
         'classificacao': classificacao,
         'subclassificacao': subclassificacao,
     }
 
 
+def _resolve_label(raw: str) -> str | None:
+    """Resolve um label bruto — com ou sem prefixo tipo::.
+
+    Aceita: 'tipo::bug', 'Bug::Avaliação', 'bug', 'logica-incorreta'.
+    """
+    if '::' in raw:
+        return _normalize_label(raw)
+    # Label "nu" — tentar mapear
+    bare = raw.lower().strip()
+    if bare in _BARE_LABELS:
+        return _BARE_LABELS[bare]
+    # Tentar normalizar como se fosse tipo::
+    normalized = _normalize_label(f'tipo::{raw}')
+    if normalized and normalized in KNOWN_TIPOS:
+        return normalized
+    return _normalize_label(f'tipo::{raw}')
+
+
 # Mapeamento de labels comuns fora do catálogo → label conhecido
 _LABEL_ALIASES = {
+    # prazo-expirado
     'tipo::avaliacao-nao-disponivel': 'tipo::prazo-expirado',
     'tipo::prazo-avaliacao': 'tipo::prazo-expirado',
     'tipo::tempo-expirado': 'tipo::prazo-expirado',
     'tipo::tempo-esgotado': 'tipo::prazo-expirado',
+    'tipo::tempo-de-execucao-insuficiente': 'tipo::prazo-expirado',
+    'tipo::tempo-insuficiente-para-avaliacao': 'tipo::prazo-expirado',
+    'tipo::tempo-habil-para-avaliacao': 'tipo::prazo-expirado',
+    'tipo::tempo-de-avaliacao-expirado': 'tipo::prazo-expirado',
+    'tipo::tempo-de-avaliacao-insuficiente': 'tipo::prazo-expirado',
+    # bug
     'tipo::validacao-falhada': 'tipo::bug',
     'tipo::logica-incorreta': 'tipo::bug',
     'tipo::excecao-nao-tratada': 'tipo::bug',
     'tipo::erro-de-codigo': 'tipo::bug',
+    'tipo::erro-de-negocio': 'tipo::bug',
+    # nao-e-erro
+    'tipo::comportamento-esperado': 'tipo::nao-e-erro',
+    'tipo::filtro-avaliacoes': 'tipo::nao-e-erro',
+    # permissao
     'tipo::acesso-negado': 'tipo::permissao',
     'tipo::sem-permissao': 'tipo::permissao',
 }
