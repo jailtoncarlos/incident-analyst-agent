@@ -48,6 +48,21 @@ def main(verbose: bool):
     logging.getLogger('gitlab').setLevel(logging.WARNING)
 
 
+_BACKEND_KEY_ENV = {
+    'groq': 'GROQ_API_KEY',
+    'deepseek': 'DEEPSEEK_API_KEY',
+    'gemini': 'GEMINI_API_KEY',
+}
+
+
+def _resolve_api_key(backend: str | None) -> str | None:
+    """Resolve API key pela variável de ambiente do backend específico."""
+    if backend and backend in _BACKEND_KEY_ENV:
+        return os.environ.get(_BACKEND_KEY_ENV[backend])
+    # Fallback: tentar todas
+    return os.environ.get('GROQ_API_KEY') or os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('GEMINI_API_KEY')
+
+
 def _generate_default_artifacts(iac_dir: Path, result: dict) -> None:
     """Gera artefatos de configuração padrão se não existem."""
     framework = result.get('framework', 'Python')
@@ -210,7 +225,7 @@ def analyze(
     llm = llm or cfg['llm'].get('backend')
     llm_model = llm_model or cfg['llm'].get('model') or 'qwen2.5:7b'
     llm_url = llm_url or cfg['llm'].get('url')
-    llm_key = llm_key or cfg['llm'].get('key') or os.environ.get('GROQ_API_KEY') or os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('GEMINI_API_KEY')
+    llm_key = llm_key or cfg['llm'].get('key') or _resolve_api_key(llm)
     gitlab_token = gitlab_token or cfg['gitlab'].get('token') or os.environ.get('GITLAB_TOKEN')
     mode = mode or cfg['analyze'].get('mode') or 'auto'
 

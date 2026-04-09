@@ -28,7 +28,11 @@ from pydantic_settings import BaseSettings
 
 
 def _resolve_llm_key() -> str | None:
-    """Resolve API key pela ordem: GROQ_API_KEY → DEEPSEEK_API_KEY → GEMINI_API_KEY → IAC_LLM_KEY."""
+    """Resolve API key pelo backend configurado, ou fallback genérico."""
+    backend = os.environ.get('IAC_LLM_BACKEND', '')
+    backend_keys = {'groq': 'GROQ_API_KEY', 'deepseek': 'DEEPSEEK_API_KEY', 'gemini': 'GEMINI_API_KEY'}
+    if backend in backend_keys:
+        return os.environ.get(backend_keys[backend]) or os.environ.get('IAC_LLM_KEY')
     return os.environ.get('GROQ_API_KEY') or os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('GEMINI_API_KEY') or os.environ.get('IAC_LLM_KEY')
 
 
