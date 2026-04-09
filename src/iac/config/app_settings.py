@@ -9,7 +9,7 @@ Variáveis de ambiente aceitas:
     GITLAB_TOKEN        — Access token do GitLab
     IAC_LLM_BACKEND     — Backend LLM (ollama, groq, deepseek, gemini)
     IAC_LLM_MODEL       — Nome do modelo
-    IAC_LLM_URL         — Endpoint da API
+    IAC_LLM_URL         — Endpoint genérico (fallback)
     IAC_LLM_KEY         — API key genérica (fallback)
     IAC_LLM_RATE_DELAY  — Delay entre chamadas em segundos (0 = sem delay)
     IAC_LLM_MAX_RETRIES — Máximo de retries em rate limit (default: 3)
@@ -17,6 +17,9 @@ Variáveis de ambiente aceitas:
     GROQ_API_KEY        — API key do Groq
     DEEPSEEK_API_KEY    — API key do DeepSeek
     GEMINI_API_KEY      — API key do Google Gemini
+    GROQ_API_URL        — Endpoint do Groq (opcional)
+    DEEPSEEK_API_URL    — Endpoint do DeepSeek (opcional)
+    GEMINI_API_URL      — Endpoint do Gemini (opcional)
 """
 
 from __future__ import annotations
@@ -36,6 +39,21 @@ def _resolve_llm_key() -> str | None:
     return os.environ.get('GROQ_API_KEY') or os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('GEMINI_API_KEY') or os.environ.get('IAC_LLM_KEY')
 
 
+def _resolve_llm_url() -> str:
+    """Resolve endpoint pelo backend configurado, com fallback genérico."""
+    backend = os.environ.get('IAC_LLM_BACKEND', '')
+    backend_urls = {
+        'groq': 'GROQ_API_URL',
+        'deepseek': 'DEEPSEEK_API_URL',
+        'gemini': 'GEMINI_API_URL',
+    }
+    if backend in backend_urls:
+        value = os.environ.get(backend_urls[backend])
+        if value:
+            return value
+    return os.environ.get('IAC_LLM_URL', 'http://localhost:11434/v1/chat/completions')
+
+
 def _resolve_gitlab_token() -> str | None:
     """Resolve token pela ordem: GITLAB_TOKEN → IAC_GITLAB_TOKEN."""
     return os.environ.get('GITLAB_TOKEN') or os.environ.get('IAC_GITLAB_TOKEN')
@@ -46,7 +64,7 @@ class LLMSettings(BaseSettings):
 
     backend: str = Field('ollama', description='Backend: ollama | groq | deepseek | gemini')
     model: str = Field('qwen2.5:7b', description='Nome do modelo')
-    url: str = Field('http://localhost:11434/v1/chat/completions', description='Endpoint da API')
+    url: str = Field(default_factory=_resolve_llm_url, description='Endpoint da API')
     key: str | None = Field(default_factory=_resolve_llm_key, description='API key (GROQ_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY ou IAC_LLM_KEY)')
     max_tokens: int = Field(4000, description='Máximo de tokens na resposta')
     temperature: float = Field(0.2, description='Temperatura do modelo')

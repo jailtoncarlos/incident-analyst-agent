@@ -54,6 +54,12 @@ _BACKEND_KEY_ENV = {
     'gemini': 'GEMINI_API_KEY',
 }
 
+_BACKEND_URL_ENV = {
+    'groq': 'GROQ_API_URL',
+    'deepseek': 'DEEPSEEK_API_URL',
+    'gemini': 'GEMINI_API_URL',
+}
+
 
 def _resolve_api_key(backend: str | None) -> str | None:
     """Resolve API key pela variável de ambiente do backend específico."""
@@ -161,7 +167,7 @@ def init(base_dir: str, force: bool, stats: bool):
 @click.option('--description', type=str, default=None, help='Descrição do incidente.')
 @click.option('--base-dir', type=click.Path(exists=True), default='.', help='Diretório raiz do projeto.')
 @click.option('--llm', type=click.Choice(['ollama', 'groq', 'deepseek', 'gemini']), envvar='IAC_LLM_BACKEND', default=None, help='Backend LLM (env: IAC_LLM_BACKEND).')
-@click.option('--llm-url', type=str, envvar='IAC_LLM_URL', default=None, help='Endpoint do LLM (env: IAC_LLM_URL).')
+@click.option('--llm-url', type=str, envvar='IAC_LLM_URL', default=None, help='Endpoint do LLM (env: IAC_LLM_URL; backends remotos também aceitam *_API_URL específicos).')
 @click.option('--llm-key', type=str, default=None, help='API key do LLM (env: GROQ_API_KEY, GEMINI_API_KEY).')
 @click.option('--llm-model', type=str, envvar='IAC_LLM_MODEL', default=None, help='Modelo do LLM (env: IAC_LLM_MODEL).')
 @click.option('--gitlab-token', type=str, envvar='GITLAB_TOKEN', default=None, help='Token GitLab (env: GITLAB_TOKEN).')
@@ -275,10 +281,16 @@ def analyze(
         sys.exit(1)
 
     # URL default por backend (se não informado)
+    backend_url = os.environ.get(_BACKEND_URL_ENV.get(llm, '')) if llm else None
+    if backend_url:
+        llm_url = backend_url
+
     if llm == 'groq' and (not llm_url or 'localhost' in llm_url):
         llm_url = 'https://api.groq.com/openai/v1/chat/completions'
     elif llm == 'deepseek' and (not llm_url or 'localhost' in llm_url):
         llm_url = 'https://api.deepseek.com/v1/chat/completions'
+    elif llm == 'gemini' and (not llm_url or 'localhost' in llm_url):
+        llm_url = f'https://generativelanguage.googleapis.com/v1beta/models/{llm_model}:generateContent'
 
     logger.info('=== iac analyze iniciado ===')
     logger.info(f'Base dir: {base}')

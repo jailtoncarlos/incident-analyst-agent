@@ -260,10 +260,20 @@ def get_effective_config(iac_dir: Path, cli_args: dict) -> dict:
     config = dict(DEFAULT_CONFIG)
 
     # .env → os.environ → config (só se não None)
+    backend_url = (
+        os.environ.get('GROQ_API_URL')
+        if os.environ.get('IAC_LLM_BACKEND') == 'groq' else
+        os.environ.get('DEEPSEEK_API_URL')
+        if os.environ.get('IAC_LLM_BACKEND') == 'deepseek' else
+        os.environ.get('GEMINI_API_URL')
+        if os.environ.get('IAC_LLM_BACKEND') == 'gemini' else
+        None
+    )
+
     env_map = {
         ('llm', 'backend'): os.environ.get('IAC_LLM_BACKEND'),
         ('llm', 'model'): os.environ.get('IAC_LLM_MODEL'),
-        ('llm', 'url'): os.environ.get('IAC_LLM_URL'),
+        ('llm', 'url'): backend_url or os.environ.get('IAC_LLM_URL'),
         ('llm', 'key'): os.environ.get('GROQ_API_KEY') or os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('GEMINI_API_KEY'),
         ('gitlab', 'token'): os.environ.get('GITLAB_TOKEN'),
         ('analyze', 'mode'): os.environ.get('IAC_ANALYZE_MODE'),
