@@ -86,6 +86,7 @@ def analyze_issue(
     max_steps: int | None = None,
     max_context_chars: int | None = None,
     max_refs: int | None = None,
+    profile: dict | None = None,
 ) -> dict:
     """Ponto de entrada único para análise completa de um incidente.
 
@@ -101,6 +102,7 @@ def analyze_issue(
         max_steps: Sobrescreve o limite de passos do perfil.
         max_context_chars: Sobrescreve o limite de contexto do perfil.
         max_refs: Sobrescreve o limite de referências do perfil.
+        profile: Perfil do cliente (.iac/profile.yaml).
 
     Returns:
         Dict com classification, context, structural, deep e profile.
@@ -115,7 +117,7 @@ def analyze_issue(
 
     # Camada 1: Classifier
     logger.info('[Camada 1] Classifier — extraindo metadados da descrição')
-    classification = classify(title, description)
+    classification = classify(title, description, profile=profile)
     logger.info(f'[Camada 1] Resultado: origem={classification["origem"]}, app={classification.get("app")}, erro_id={classification.get("erro_id")}')
     logger.debug('[Camada 1] Classifier retornou:\n' + fmt_dict(classification))
 

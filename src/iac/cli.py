@@ -276,6 +276,7 @@ def analyze(
         graph=graph,
         base_dir=base,
         model_name=llm_model,
+        profile=profile,
     )
 
     # 3. Exibir análise estrutural
