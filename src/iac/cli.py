@@ -12,6 +12,7 @@ Uso:
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -144,8 +145,8 @@ def analyze(
     if llm and not llm_model:
         llm_model = cfg['llm']['model']
     llm_url = llm_url or cfg['llm'].get('url')
-    llm_key = llm_key or cfg['llm'].get('key')
-    gitlab_token = gitlab_token or cfg['gitlab'].get('token')
+    llm_key = llm_key or cfg['llm'].get('key') or os.environ.get('GROQ_API_KEY') or os.environ.get('GEMINI_API_KEY')
+    gitlab_token = gitlab_token or cfg['gitlab'].get('token') or os.environ.get('GITLAB_TOKEN')
     mode = cfg['analyze'].get('mode', mode)
 
     structure = load_structure(iac_dir)
@@ -187,6 +188,16 @@ def analyze(
         description = ''
 
     # Log dos argumentos de entrada
+    # Validar API key para backends que exigem
+    if llm in ('groq', 'gemini') and not llm_key:
+        env_var = 'GROQ_API_KEY' if llm == 'groq' else 'GEMINI_API_KEY'
+        click.echo(f'API key necessária para {llm}. Use --llm-key, {env_var} ou config.yaml.')
+        sys.exit(1)
+
+    # URL default por backend (se não informado)
+    if llm == 'groq' and (not llm_url or 'localhost' in llm_url):
+        llm_url = 'https://api.groq.com/openai/v1/chat/completions'
+
     logger.info('=== iac analyze iniciado ===')
     logger.info(f'Base dir: {base}')
     logger.info(f'Issue URL: {issue_url or "(não informado)"}')
