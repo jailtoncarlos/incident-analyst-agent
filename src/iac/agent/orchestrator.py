@@ -12,13 +12,13 @@ import logging
 import re
 from pathlib import Path
 
-from iac.analyzer.classifier import classify
+from iac.agent.deep import deep_investigate, format_deep_analysis  # noqa: F401
+from iac.agent.format import fmt_dict, format_context_for_prompt  # noqa: F401
 
 # Re-exports para retrocompatibilidade
 from iac.agent.investigate import investigate  # noqa: F401
-from iac.agent.deep import deep_investigate, format_deep_analysis  # noqa: F401
 from iac.agent.structural import build_structural_analysis, format_structural_analysis  # noqa: F401
-from iac.agent.format import format_context_for_prompt, fmt_dict  # noqa: F401
+from iac.analyzer.classifier import classify
 
 logger = logging.getLogger(__name__)
 

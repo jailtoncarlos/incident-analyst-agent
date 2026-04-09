@@ -136,7 +136,7 @@ def format_deep_analysis(deep_models: list[dict]) -> str:
 
         if model.get('methods'):
             lines.append(f'\n{indent}**Métodos:**\n')
-            for method_name, method_info in model['methods'].items():
+            for _method_name, method_info in model['methods'].items():
                 lines.append(f'{indent}```python')
                 lines.append(f'{method_info["source"]}')
                 lines.append(f'{indent}```\n')

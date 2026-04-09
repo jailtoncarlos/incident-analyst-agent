@@ -100,17 +100,15 @@ def build_structural_analysis(
     # Admin dos models
     for model_fqn in analysis['models']:
         for edge in edges:
-            if edge['to'] == model_fqn and edge['type'] == 'admin_register':
-                if edge['from'] not in analysis['admin']:
-                    analysis['admin'].append(edge['from'])
+            if edge['to'] == model_fqn and edge['type'] == 'admin_register' and edge['from'] not in analysis['admin']:
+                analysis['admin'].append(edge['from'])
 
     # FK de segundo nível
     related_models = []
     for model_fqn in analysis['models']:
         for edge in edges:
-            if edge['from'] == model_fqn and edge['type'] == 'model_relation':
-                if edge['to'] not in analysis['models'] and edge['to'] not in related_models:
-                    related_models.append(edge['to'])
+            if edge['from'] == model_fqn and edge['type'] == 'model_relation' and edge['to'] not in analysis['models'] and edge['to'] not in related_models:
+                related_models.append(edge['to'])
 
     # Fluxo
     flow = analysis['flow']
@@ -161,7 +159,7 @@ def format_structural_analysis(analysis: dict) -> str:
     if analysis.get('tipo_sugerido'):
         lines.append(f'**Tipo sugerido:** `{analysis["tipo_sugerido"]}`')
 
-    lines.append(f'\n## Análise estrutural\n')
+    lines.append('\n## Análise estrutural\n')
     lines.append('*Obtida via inspeção do código (`.iac/structure.json` + `.iac/graph.json`).*\n')
 
     if analysis.get('app'):
@@ -172,27 +170,27 @@ def format_structural_analysis(analysis: dict) -> str:
         lines.append(f'**Arquivo:** `{analysis["file"]}:{analysis.get("line", "?")}`')
 
     if analysis.get('models'):
-        lines.append(f'\n### Models envolvidos\n')
+        lines.append('\n### Models envolvidos\n')
         for m in analysis['models']:
             lines.append(f'- `{m}`')
     if analysis.get('related_models'):
-        lines.append(f'\n### Models relacionados (FK/M2M)\n')
+        lines.append('\n### Models relacionados (FK/M2M)\n')
         for m in analysis['related_models']:
             lines.append(f'- `{m}`')
     if analysis.get('forms'):
-        lines.append(f'\n### Forms envolvidos\n')
+        lines.append('\n### Forms envolvidos\n')
         for f in analysis['forms']:
             lines.append(f'- `{f}`')
     if analysis.get('templates'):
-        lines.append(f'\n### Templates\n')
+        lines.append('\n### Templates\n')
         for t in analysis['templates']:
             lines.append(f'- `{t}`')
     if analysis.get('admin'):
-        lines.append(f'\n### Admin\n')
+        lines.append('\n### Admin\n')
         for a in analysis['admin']:
             lines.append(f'- `{a}`')
     if analysis.get('flow'):
-        lines.append(f'\n### Fluxo de interação\n')
+        lines.append('\n### Fluxo de interação\n')
         lines.append('```')
         for step in analysis['flow']:
             short_from = _short_name(step['from'])

@@ -407,9 +407,7 @@ def _extract_fk_references(node: ast.ClassDef) -> list[str]:
     for child in ast.iter_child_nodes(node):
         if isinstance(child, ast.Assign) and isinstance(child.value, ast.Call):
             call_name = _call_name(child.value)
-            if call_name and any(fk in call_name for fk in fk_types):
-                # Primeiro argumento posicional é o model referenciado
-                if child.value.args:
+            if call_name and any(fk in call_name for fk in fk_types) and child.value.args:
                     arg = child.value.args[0]
                     if isinstance(arg, ast.Name) and arg.id not in refs:
                         refs.append(arg.id)

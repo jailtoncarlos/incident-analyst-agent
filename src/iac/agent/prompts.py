@@ -13,12 +13,11 @@ from __future__ import annotations
 import logging
 import re
 
-logger = logging.getLogger(__name__)
-
-from iac.agent.format import format_context_for_prompt
 from iac.agent.deep import format_deep_analysis
+from iac.agent.format import format_context_for_prompt
 from iac.agent.structural import format_structural_analysis
 
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Prompt de análise
@@ -431,6 +430,7 @@ def resolve_investigation_requests(
         Texto em Markdown com o código-fonte de cada componente solicitado.
     """
     from pathlib import Path
+
     from iac.agent.tools import ler_funcao, localizar_arquivo
 
     sections = []

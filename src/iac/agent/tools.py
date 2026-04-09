@@ -102,7 +102,7 @@ def _match_score(pattern: str, path: str) -> int:
     p_parts = [p for p in pattern.split('/') if p]
     u_parts = [p for p in path.split('/') if p]
     score = 0
-    for pp, up in zip(p_parts, u_parts):
+    for pp, up in zip(p_parts, u_parts, strict=False):
         if pp == up:
             score += 2
         elif pp.startswith('<'):
@@ -209,11 +209,11 @@ def ler_funcao(file_path: str, line: int, base_dir: Path, max_lines: int = 80, m
 
     # Encontrar o nó AST que começa na linha indicada
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.lineno == line:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) and node.lineno == line:
             # Se pediu um método específico dentro de uma classe
             if method and isinstance(node, ast.ClassDef):
                 for child in ast.iter_child_nodes(node):
-                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == method:
+                    if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef) and child.name == method:
                         end_line = child.end_lineno or (child.lineno + max_lines)
                         lines = source.splitlines()
                         start = child.lineno - 1
@@ -395,8 +395,8 @@ def buscar_simbolo(pattern: str, base_dir: Path, max_results: int = 10) -> list[
     import subprocess
 
     try:
-        result = subprocess.run(
-            ['grep', '-rn', '--include=*.py', '-E', pattern, str(base_dir)],
+        result = subprocess.run(  # noqa: S603
+            ['grep', '-rn', '--include=*.py', '-E', pattern, str(base_dir)],  # noqa: S607
             capture_output=True,
             text=True,
             timeout=10,

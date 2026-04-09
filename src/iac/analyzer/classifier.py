@@ -175,12 +175,10 @@ def _extrair_campos_estruturados(description: str, result: dict) -> None:
 
     # Link do erro SUAP
     match = _RE_ERRO_SUAP_LINK.search(description)
-    if match:
-        # Extrair erro_id do link se não veio do título
-        if not result['erro_id']:
-            id_match = re.search(r'/erro/(\d+)/', match.group(1))
-            if id_match:
-                result['erro_id'] = id_match.group(1)
+    if match and not result['erro_id']:
+        id_match = re.search(r'/erro/(\d+)/', match.group(1))
+        if id_match:
+            result['erro_id'] = id_match.group(1)
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +219,7 @@ def _extrair_app(title: str, description: str, result: dict) -> None:
 
     # 4. Dos labels
     for label in _APP_ALIASES.values():
-        if label in [l.lower() for l in (result.get('_labels_raw') or [])]:
+        if label in [lbl.lower() for lbl in (result.get('_labels_raw') or [])]:
             result['app'] = label
             return
 
