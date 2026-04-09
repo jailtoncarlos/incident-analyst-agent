@@ -7,6 +7,7 @@ Encapsula a lógica de envio de prompts e processamento de respostas.
 from __future__ import annotations
 
 import logging
+import os
 import time
 
 from iac.agent.format import format_context_for_prompt
@@ -25,19 +26,21 @@ from iac.agent.prompts import (
 logger = logging.getLogger(__name__)
 
 
+_LLM_RATE_DELAY = int(os.environ.get('IAC_LLM_RATE_DELAY', '0'))
+_LLM_MAX_RETRIES = int(os.environ.get('IAC_LLM_MAX_RETRIES', '3'))
+
+
 def send_to_llm(prompt: str, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> str | None:
     """Envia prompt ao backend LLM configurado.
 
-    Args:
-        prompt: Texto do prompt.
-        llm: Backend ('ollama' ou 'gemini').
-        llm_model: Nome do modelo.
-        llm_url: Endpoint da API.
-        llm_key: API key.
-
-    Returns:
-        Texto da resposta ou None.
+    Rate delay e retries são controlados por variáveis de ambiente:
+        IAC_LLM_RATE_DELAY — delay em segundos entre chamadas (default: 0)
+        IAC_LLM_MAX_RETRIES — máximo de retries (default: 3)
     """
+    if _LLM_RATE_DELAY > 0 and llm != 'ollama':
+        logger.debug(f'[LLM] Rate delay: {_LLM_RATE_DELAY}s')
+        time.sleep(_LLM_RATE_DELAY)
+
     t0 = time.time()
     result = None
     if llm == 'ollama':

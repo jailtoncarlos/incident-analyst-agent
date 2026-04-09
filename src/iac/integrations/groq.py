@@ -28,8 +28,7 @@ DEFAULT_URL = 'https://api.groq.com/openai/v1/chat/completions'
 DEFAULT_TIMEOUT = 60
 DEFAULT_MAX_TOKENS = 4000
 DEFAULT_TEMPERATURE = 0.2
-DEFAULT_RATE_DELAY = int(os.environ.get('GROQ_RATE_DELAY', '0'))
-DEFAULT_MAX_RETRIES = int(os.environ.get('GROQ_MAX_RETRIES', '3'))
+DEFAULT_MAX_RETRIES = int(os.environ.get('IAC_LLM_MAX_RETRIES', '3'))
 
 
 def chat(
@@ -70,10 +69,6 @@ def chat(
         'max_tokens': max_tokens,
         'temperature': temperature,
     }
-
-    if DEFAULT_RATE_DELAY > 0:
-        logger.debug(f'[Groq] Rate delay: {DEFAULT_RATE_DELAY}s')
-        time.sleep(DEFAULT_RATE_DELAY)
 
     for attempt in range(1, DEFAULT_MAX_RETRIES + 1):
         try:
