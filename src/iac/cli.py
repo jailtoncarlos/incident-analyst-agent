@@ -81,7 +81,7 @@ def init(base_dir: str, force: bool, stats: bool):
 @click.option('--title', type=str, default=None, help='Título do incidente.')
 @click.option('--description', type=str, default=None, help='Descrição do incidente.')
 @click.option('--base-dir', type=click.Path(exists=True), default='.', help='Diretório raiz do projeto.')
-@click.option('--llm', type=click.Choice(['ollama', 'gemini']), default=None, help='Backend LLM.')
+@click.option('--llm', type=click.Choice(['ollama', 'groq', 'gemini']), default=None, help='Backend LLM.')
 @click.option('--llm-url', type=str, default=None, help='Endpoint do LLM.')
 @click.option('--llm-key', type=str, default=None, help='API key do LLM.')
 @click.option('--llm-model', type=str, default=None, help='Modelo do LLM (default: config.yaml ou qwen2.5:7b).')

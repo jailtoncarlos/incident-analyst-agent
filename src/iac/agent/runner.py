@@ -44,6 +44,10 @@ def send_to_llm(prompt: str, llm: str, llm_model: str, llm_url: str | None, llm_
         from iac.integrations import ollama
         url = llm_url or 'http://localhost:11434/v1/chat/completions'
         result = ollama.chat(prompt, url=url, model=llm_model, api_key=llm_key)
+    elif llm == 'groq':
+        from iac.integrations import groq
+        url = llm_url or groq.DEFAULT_URL
+        result = groq.chat(prompt, url=url, model=llm_model, api_key=llm_key)
     elif llm == 'gemini':
         from iac.integrations import gemini
         if not llm_url or not llm_key:
