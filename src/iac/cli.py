@@ -137,9 +137,11 @@ def analyze(
         'gitlab_token': gitlab_token, 'mode': mode,
     })
 
-    # Aplicar config (CLI args já sobrescreveram)
-    llm = llm or cfg['llm'].get('backend')
-    llm_model = cfg['llm']['model']
+    # Aplicar config — llm só é ativado se passado via --llm
+    # config.yaml define o default quando --llm é passado, não ativa automaticamente
+    llm_model = llm_model or cfg['llm'].get('model') or 'qwen2.5:7b'
+    if llm and not llm_model:
+        llm_model = cfg['llm']['model']
     llm_url = llm_url or cfg['llm'].get('url')
     llm_key = llm_key or cfg['llm'].get('key')
     gitlab_token = gitlab_token or cfg['gitlab'].get('token')
