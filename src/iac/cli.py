@@ -69,20 +69,17 @@ def _generate_default_artifacts(iac_dir: Path, result: dict) -> None:
         )
         click.echo('  → .iac/.env (template de configuração)')
 
-    # profile.yaml — copiar template e personalizar com nome e framework
+    # profile.yaml — template limpo (sem defaults preenchidos)
     profile_file = iac_dir / 'profile.yaml'
     if not profile_file.exists():
         from iac.config.settings import get_defaults_dir
 
-        default_profile = get_defaults_dir() / 'profile.yaml'
-        if default_profile.exists():
-            content = default_profile.read_text(encoding='utf-8')
+        init_template = get_defaults_dir() / 'profile.init.yaml'
+        if init_template.exists():
+            content = init_template.read_text(encoding='utf-8')
             content = content.replace('name: ""', f'name: "{iac_dir.parent.name}"')
             content = content.replace('system_description: "Django"', f'system_description: "{framework}"')
             profile_file.write_text(content, encoding='utf-8')
-        else:
-            import yaml
-            yaml.dump({'name': iac_dir.parent.name, 'system_description': framework, 'rules': []}, open(profile_file, 'w', encoding='utf-8'), default_flow_style=False, allow_unicode=True)  # noqa: SIM115
         click.echo('  → .iac/profile.yaml (perfil do projeto — customize para seu sistema)')
 
     # logs/
