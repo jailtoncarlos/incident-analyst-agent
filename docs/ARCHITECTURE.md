@@ -100,7 +100,12 @@ src/iac/
 │   ├── structural.py          # Camada 3: componentes + fluxo (P2)
 │   ├── format.py              # Formatação de contexto para prompts (P2)
 │   ├── tools.py               # 7 ferramentas de navegação
-│   └── prompts.py             # Prompts para LLM (single + multi-prompt)
+│   ├── runner.py              # Runner LLM: single/multi-prompt (P2)
+│   └── prompts/               # Pacote de prompts (P2)
+│       ├── analysis.py        # Prompt single-prompt (análise completa)
+│       ├── multi.py           # Prompts multi-prompt (investigação + evidência)
+│       ├── response.py        # Prompt de resposta ao usuário
+│       └── utils.py           # Extração de tipo + compactação
 │
 ├── analyzer/
 │   ├── classifier.py          # Classificação sem LLM (origem, app, interessado)
