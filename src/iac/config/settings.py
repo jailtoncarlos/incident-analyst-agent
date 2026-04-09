@@ -120,46 +120,27 @@ def save_graph(iac_dir: Path, graph: dict) -> None:
 
 PROFILE_FILE = 'profile.yaml'
 
-DEFAULT_KNOWN_TIPOS = {
-    'tipo::bug',
-    'tipo::configuracao',
-    'tipo::dados-cadastrais',
-    'tipo::prazo-expirado',
-    'tipo::nao-e-erro',
-    'tipo::permissao',
-}
 
-DEFAULT_ALIASES = {
-    # prazo-expirado
-    'tipo::avaliacao-nao-disponivel': 'tipo::prazo-expirado',
-    'tipo::prazo-avaliacao': 'tipo::prazo-expirado',
-    'tipo::prazo-insuficiente': 'tipo::prazo-expirado',
-    'tipo::tempo-expirado': 'tipo::prazo-expirado',
-    'tipo::tempo-esgotado': 'tipo::prazo-expirado',
-    'tipo::tempo-de-execucao-insuficiente': 'tipo::prazo-expirado',
-    'tipo::tempo-insuficiente-para-avaliacao': 'tipo::prazo-expirado',
-    'tipo::tempo-habil-para-avaliacao': 'tipo::prazo-expirado',
-    'tipo::tempo-de-avaliacao-expirado': 'tipo::prazo-expirado',
-    'tipo::tempo-de-avaliacao-insuficiente': 'tipo::prazo-expirado',
-    'tipo::avaliacao-tempo-habil-insuficiente': 'tipo::prazo-expirado',
-    'tipo::erro-de-temporizacao': 'tipo::prazo-expirado',
-    'tipo::avaliacao-nao-realizada': 'tipo::prazo-expirado',
-    # bug
-    'tipo::validacao-falhada': 'tipo::bug',
-    'tipo::logica-incorreta': 'tipo::bug',
-    'tipo::excecao-nao-tratada': 'tipo::bug',
-    'tipo::erro-de-codigo': 'tipo::bug',
-    'tipo::erro-de-negocio': 'tipo::bug',
-    'tipo::erro-de-logica': 'tipo::bug',
-    # nao-e-erro
-    'tipo::comportamento-esperado': 'tipo::nao-e-erro',
-    'tipo::filtro-avaliacoes': 'tipo::nao-e-erro',
-    # permissao
-    'tipo::acesso-negado': 'tipo::permissao',
-    'tipo::sem-permissao': 'tipo::permissao',
-    'tipo::acesso-inesperado': 'tipo::permissao',
-    'tipo::permissao-insuficiente': 'tipo::permissao',
-}
+def get_defaults_dir() -> Path:
+    """Retorna o diretório de defaults do IAC."""
+    return Path(__file__).parent.parent / 'defaults'
+
+
+def _load_default_taxonomy() -> tuple[set, dict]:
+    """Carrega known_tipos e aliases do defaults/profile.yaml (fonte única)."""
+    import yaml
+
+    default_file = get_defaults_dir() / PROFILE_FILE
+    if default_file.exists():
+        with open(default_file, encoding='utf-8') as f:
+            data = yaml.safe_load(f) or {}
+        tax = data.get('taxonomy', {})
+        return set(tax.get('known_tipos', [])), dict(tax.get('aliases', {}))
+    return set(), {}
+
+
+# Carregados do defaults/profile.yaml — fonte única de verdade
+DEFAULT_KNOWN_TIPOS, DEFAULT_ALIASES = _load_default_taxonomy()
 
 DEFAULT_PROFILE = {
     'system_description': 'Django',
@@ -169,11 +150,6 @@ DEFAULT_PROFILE = {
         'aliases': dict(DEFAULT_ALIASES),
     },
 }
-
-
-def get_defaults_dir() -> Path:
-    """Retorna o diretório de defaults do IAC."""
-    return Path(__file__).parent.parent / 'defaults'
 
 
 def load_profile(iac_dir: Path) -> dict:
