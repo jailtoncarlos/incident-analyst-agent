@@ -15,7 +15,9 @@ import re
 
 logger = logging.getLogger(__name__)
 
-from iac.agent.orchestrator import format_context_for_prompt, format_deep_analysis, format_structural_analysis
+from iac.agent.format import format_context_for_prompt
+from iac.agent.deep import format_deep_analysis
+from iac.agent.structural import format_structural_analysis
 
 
 # ---------------------------------------------------------------------------
