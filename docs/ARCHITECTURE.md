@@ -188,11 +188,25 @@ Detecção automática pelo nome do modelo via `get_model_profile()`.
 
 ## Modos de operação do LLM
 
-| Modo | Prompts | Quando |
-|------|---------|--------|
-| `single` | 1 prompt completo | Modelos médios/grandes |
-| `multi` | Prompt 1 (investigação) → Prompt 2 (análise) → Prompt 3 (resposta) | Modelos pequenos (7B) |
-| `auto` | Seleciona automaticamente pelo perfil | Default |
+| Modo | Módulo | Prompts | Quando |
+|------|--------|---------|--------|
+| `single` | `runner.py` | 1 prompt completo | Modelos médios/grandes |
+| `multi` | `runner.py` | Prompt 1 (investigação) → Prompt 2 (análise) → Prompt 3 (resposta) | Modelos pequenos (7B) — **acertou `tipo::prazo-expirado`** |
+| `loop` | `loop.py` | Loop iterativo — LLM decide quando parar (max 4 iterações) | Experimental ([#45](https://github.com/jailtoncarlos/incident-analyst-agent/issues/45)) |
+| `auto` | — | Seleciona `multi` ou `loop` pelo perfil | Default |
+
+### Modo loop — ações tipadas
+
+O LLM responde com uma ação por iteração:
+
+| Ação | O que faz | Encerra loop? |
+|------|-----------|---------------|
+| `INVESTIGAR` | Pede mais código → resolve via tools | Não |
+| `VERIFICAR_BANCO` | Pede simulação no banco ([#44](https://github.com/jailtoncarlos/incident-analyst-agent/issues/44)) | Não |
+| `ALTERAR_CODIGO` | Sugere diff (antes/depois) | Não |
+| `CLASSIFICAR` | Análise final + tipo + resolução | **Sim** |
+
+Controles: max 4 iterações, detecção de repetição, forçar CLASSIFICAR na última iteração.
 
 ## Estratégia de prompts
 
@@ -202,9 +216,9 @@ Os prompts usam **orientações**, não templates rígidos — o LLM adapta a re
 
 **Correlação descrição ↔ código:** os prompts orientam o LLM a correlacionar a descrição do usuário com constantes e campos do código (ex: "tempo hábil" → `TEMPO_AVALIACAO = 10`).
 
-**Plano de verificação:** em vez de "plano de simulação" com template fixo, o LLM indica o que verificar no banco e como admin para confirmar a hipótese.
+**Plano de verificação:** o LLM indica o que verificar no banco e como admin para confirmar a hipótese.
 
-**Fluxo futuro com verificação no banco** ([#44](https://github.com/jailtoncarlos/incident-analyst-agent/issues/44)):
+**Fluxo com verificação no banco** ([#44](https://github.com/jailtoncarlos/incident-analyst-agent/issues/44)):
 
 ```
 Prompt 1 (investigação)       → LLM pede código
