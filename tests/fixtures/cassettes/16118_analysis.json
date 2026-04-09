@@ -1,0 +1,7 @@
+{
+  "issue_id": 16118,
+  "model": "qwen2.5-coder:7b",
+  "prompt_type": "analysis",
+  "prompt_chars": 7501,
+  "response": "### 1. Análise do código\nA view lista avaliações para o aluno logado em 3 categorias.\n\n### 2. Análise aprofundada\n[ENCONTRADO] TEMPO_AVALIACAO = 10 define janela de 10 dias.\n[ENCONTRADO] A view filtra por situacao que muda após o prazo.\n\n### 3. Classificação\nCLASSIFICAÇÃO: tipo::prazo-expirado\n\n### 4. Sugestão de resolução\nOrientar o aluno que o prazo de avaliação é de 10 dias.\n\n### 5. Plano de simulação\n- **Usuário afetado:** 20231124120023\n- **URL do erro:** /progressao_docente/ver_avaliacoes_discente/\n- **Admin para validação:** admin\n- **URL admin:** /admin/progressao_docente/discenteaptosavaliacao/\n- **O que verificar:** Verificar se a avaliação mudou de situação após 10 dias"
+}
