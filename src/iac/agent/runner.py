@@ -174,7 +174,7 @@ def run_auto(result: dict, structure: dict, graph: dict, base_dir, llm: str, llm
 
     if confidence >= 3:
         logger.info('[auto] Resposta confiante — aceitar single')
-        tipo = extract_tipo_from_analysis(single_analysis)
+        tipo = extract_tipo_from_analysis(single_analysis, profile=profile)
         return {
             'analysis': single_analysis,
             'tipo': tipo,
@@ -241,10 +241,10 @@ def _confidence_score(analysis: str) -> int:
 def run_response(result: dict, llm_analysis: str, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None, profile: dict | None = None) -> str | None:
     """Gera relatório técnico para o desenvolvedor (prompt 3)."""
     response_prompt = build_response_prompt(result, llm_analysis, profile=profile)
-    logger.info(f'[LLM] Prompt 3 (resposta ao usuário): {len(response_prompt)} chars → enviando ao {llm} ({llm_model})')
+    logger.info(f'[LLM] Prompt 3 (relatório técnico): {len(response_prompt)} chars → enviando ao {llm} ({llm_model})')
     logger.debug(f'[LLM] Prompt 3 (resposta) conteúdo:\n{response_prompt}')
 
     response_text = send_to_llm(response_prompt, llm, llm_model, llm_url, llm_key)
-    logger.info(f'[LLM] Resposta 3 (resposta ao usuário): {len(response_text or "")} chars')
+    logger.info(f'[LLM] Resposta 3 (relatório técnico): {len(response_text or "")} chars')
     logger.debug(f'[LLM] Resposta 3 (resposta) conteúdo:\n{response_text}')
     return response_text
