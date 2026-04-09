@@ -10,6 +10,7 @@ import logging
 import time
 
 from iac.agent.format import format_context_for_prompt
+from iac.agent.orchestrator import get_model_profile
 from iac.agent.prompts import (
     _strip_context_header,
     build_analysis_prompt,
@@ -70,8 +71,10 @@ def run_single(result: dict, llm: str, llm_model: str, llm_url: str | None, llm_
     Returns:
         Texto da análise do LLM ou None.
     """
-    prompt = build_analysis_prompt(result)
-    logger.info(f'[LLM] Modo single-prompt: {len(prompt)} chars → enviando ao {llm} ({llm_model})')
+    profile = get_model_profile(llm_model)
+    include_deep = profile.get('deep_include_methods', True)
+    prompt = build_analysis_prompt(result, include_deep=include_deep)
+    logger.info(f'[LLM] Modo single-prompt: {len(prompt)} chars (deep={include_deep}) → enviando ao {llm} ({llm_model})')
     logger.debug(f'[LLM] Prompt (single) conteúdo:\n{prompt}')
 
     analysis = send_to_llm(prompt, llm, llm_model, llm_url, llm_key)
