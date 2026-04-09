@@ -6,13 +6,17 @@ todas as configurações tipadas, com defaults explícitos e validação.
 Hierarquia: defaults → .env → variáveis de ambiente → CLI args.
 
 Variáveis de ambiente aceitas:
-    GROQ_API_KEY     — API key do Groq (gratuito)
-    GITLAB_TOKEN     — Access token do GitLab
-    GEMINI_API_KEY   — API key do Google Gemini
-    IAC_LLM_BACKEND  — Backend LLM (ollama, groq, gemini)
-    IAC_LLM_MODEL    — Nome do modelo
-    IAC_LLM_URL      — Endpoint da API
-    IAC_LLM_KEY      — API key genérica (fallback)
+    GITLAB_TOKEN        — Access token do GitLab
+    IAC_LLM_BACKEND     — Backend LLM (ollama, groq, deepseek, gemini)
+    IAC_LLM_MODEL       — Nome do modelo
+    IAC_LLM_URL         — Endpoint da API
+    IAC_LLM_KEY         — API key genérica (fallback)
+    IAC_LLM_RATE_DELAY  — Delay entre chamadas em segundos (0 = sem delay)
+    IAC_LLM_MAX_RETRIES — Máximo de retries em rate limit (default: 3)
+    IAC_ANALYZE_MODE    — Modo de análise (auto, single, multi, loop)
+    GROQ_API_KEY        — API key do Groq
+    DEEPSEEK_API_KEY    — API key do DeepSeek
+    GEMINI_API_KEY      — API key do Google Gemini
 """
 
 from __future__ import annotations
@@ -36,13 +40,15 @@ def _resolve_gitlab_token() -> str | None:
 class LLMSettings(BaseSettings):
     """Configurações do backend LLM."""
 
-    backend: str = Field('ollama', description='Backend: ollama | groq | gemini')
+    backend: str = Field('ollama', description='Backend: ollama | groq | deepseek | gemini')
     model: str = Field('qwen2.5:7b', description='Nome do modelo')
     url: str = Field('http://localhost:11434/v1/chat/completions', description='Endpoint da API')
-    key: str | None = Field(default_factory=_resolve_llm_key, description='API key (GROQ_API_KEY, GEMINI_API_KEY ou IAC_LLM_KEY)')
+    key: str | None = Field(default_factory=_resolve_llm_key, description='API key (GROQ_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY ou IAC_LLM_KEY)')
     max_tokens: int = Field(4000, description='Máximo de tokens na resposta')
     temperature: float = Field(0.2, description='Temperatura do modelo')
     timeout: int = Field(1200, description='Timeout em segundos')
+    rate_delay: int = Field(0, description='Delay entre chamadas em segundos (0 = sem delay)')
+    max_retries: int = Field(3, description='Máximo de retries em rate limit')
 
     model_config = {'env_prefix': 'IAC_LLM_'}
 
