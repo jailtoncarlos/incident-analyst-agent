@@ -1,0 +1,59 @@
+## Docker Compose para Ollama + Open WebUI
+##
+## Uso:
+##   # Subir Ollama + Open WebUI:
+##   docker compose -f docker-compose.ollama.yml up -d
+##
+##   # Baixar modelo (ex: qwen2.5-coder:7b, qwen2.5-coder:14b):
+##   docker exec ollama ollama pull qwen2.5-coder:7b
+##
+##   # Testar via API:
+##   curl http://localhost:11434/v1/chat/completions \
+##     -H "Content-Type: application/json" \
+##     -d '{"model":"qwen2.5-coder:7b","messages":[{"role":"user","content":"Olá"}]}'
+##
+##   # Acessar Open WebUI:
+##   http://localhost:3000
+##
+##   # Usar no IAC:
+##   iac analyze --llm ollama --llm-model qwen2.5-coder:7b ...
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_LOADED_MODELS=1
+    # Sem GPU: roda em CPU. Para GPU NVIDIA, descomentar:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    ports:
+      - "${OPENWEBUI_PORT:-3000}:8080"
+    volumes:
+      - openwebui_data:/app/backend/data
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_AUTH=false
+    depends_on:
+      - ollama
+
+volumes:
+  ollama_data:
+  openwebui_data:

@@ -21,7 +21,7 @@ class LLMSettings(BaseSettings):
     key: str | None = Field(None, description='API key (opcional para Ollama local)')
     max_tokens: int = Field(4000, description='Máximo de tokens na resposta')
     temperature: float = Field(0.2, description='Temperatura do modelo')
-    timeout: int = Field(600, description='Timeout em segundos')
+    timeout: int = Field(1200, description='Timeout em segundos')
 
     model_config = {'env_prefix': 'IAC_LLM_'}
 

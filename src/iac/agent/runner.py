@@ -50,7 +50,10 @@ def send_to_llm(prompt: str, llm: str, llm_model: str, llm_url: str | None, llm_
             return None
         result = gemini.chat(prompt, url=llm_url, api_key=llm_key)
     elapsed = time.time() - t0
-    logger.info(f'[LLM] send_to_llm: {len(result or "")} chars em {elapsed:.1f}s')
+    if result:
+        logger.info(f'[LLM] send_to_llm: {len(result)} chars em {elapsed:.1f}s')
+    else:
+        logger.warning(f'[LLM] send_to_llm: sem resposta em {elapsed:.1f}s (possível timeout ou erro de conexão)')
     return result
 
 

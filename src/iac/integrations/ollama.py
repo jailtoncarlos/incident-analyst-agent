@@ -11,7 +11,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT = 600  # 10 min — modelos em CPU podem ser lentos
+DEFAULT_TIMEOUT = 1200  # 20 min — modelos 14B em CPU podem ser muito lentos
 DEFAULT_MAX_TOKENS = 4000
 DEFAULT_TEMPERATURE = 0.2
 
