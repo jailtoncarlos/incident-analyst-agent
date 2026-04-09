@@ -246,6 +246,25 @@ Formato por camada, gravado em `.iac/logs/iac.log` (DEBUG) e terminal (INFO):
 [Resultado] Classificação: tipo::prazo-expirado
 ```
 
+## Cenários testados — issue [#16118](https://gitlab.ifrn.edu.br/cosinf/suap/-/work_items/16118)
+
+Classificação esperada: `tipo::prazo-expirado` (prazo de 10 dias para avaliação discente expirou).
+
+| Modelo | Modo | Classificação | Acertou? | Observação |
+|--------|------|---------------|----------|------------|
+| qwen2.5:7b | single | `tipo::bug` | ❌ | Não correlacionou "tempo hábil" com constante |
+| qwen2.5:7b | multi | `tipo::bug` | ❌ | Evidência insuficiente (381 chars) |
+| qwen2.5-coder:7b | multi | `tipo::nao-e-erro` | ❌ | Reconheceu filtro mas não correlacionou prazo |
+| **qwen2.5-coder:7b** | **multi** | **`tipo::prazo-expirado`** | **✅** | Prompts com orientação + evidência focal |
+| qwen2.5-coder:7b | loop v1 | `Bug::Avaliação Não Preenchida` | ❌ | Confundiu TEMPO_PREENCHIMENTO com TEMPO_AVALIACAO |
+| qwen2.5-coder:7b | loop v2 | `tipo::permissao-nao-autorizada` | ❌ | Foi direto para CLASSIFICAR sem investigar |
+| qwen2.5:14b | multi | — | ⏳ | A testar |
+| qwen2.5:14b | loop | — | ⏳ | A testar |
+
+Detalhes de cada execução: [issue #15](https://github.com/jailtoncarlos/incident-analyst-agent/issues/15).
+
+Nota: modelos 7B são não-determinísticos — mesma entrada pode dar resultados diferentes entre execuções.
+
 ## Qualidade de código
 
 - **Lint:** `ruff` com 11 categorias de regras (E, F, W, I, N, UP, S, B, SIM, PIE, D)
