@@ -188,12 +188,16 @@ Detecção automática pelo nome do modelo via `get_model_profile()`.
 
 ## Modos de operação do LLM
 
-| Modo | Módulo | Contexto enviado | Quando |
-|------|--------|------------------|--------|
-| `single` | `runner.py` | Tudo de uma vez: structural + view + refs + deep (constantes + métodos) | Modelos médios/grandes (14B+) |
-| `multi` | `runner.py` | Prompt 1: structural + view + refs → Prompt 2: evidência + view + deep constants → Prompt 3: resposta | Modelos pequenos (7B) — **acertou `tipo::prazo-expirado`** |
-| `loop` | `loop.py` | Prompt base + iterações incrementais — LLM decide quando parar (max 4) | Experimental ([#45](https://github.com/jailtoncarlos/incident-analyst-agent/issues/45)) |
-| `auto` | — | small (7B) → `multi`, medium/large (14B+) → `loop` | Default |
+| Modo | Módulo | Contexto enviado | Quando usar |
+|------|--------|------------------|-------------|
+| `single` | `runner.py` | 1 prompt com tudo: structural + view + refs + deep (constantes + código dos métodos) | Modelos 14B+ que suportam contexto grande (~20K chars) |
+| `multi` | `runner.py` | 3 prompts fixos: investigação → análise com evidência → resposta | Modelos 7B — mais estável e previsível |
+| `loop` | `loop.py` | Prompt base + iterações incrementais — LLM decide ações (INVESTIGAR, VERIFICAR_BANCO, CLASSIFICAR) | Modelos 14B+ — LLM decide quando parar (max 4 iterações) |
+| `auto` | — | small (7B) → `multi`, medium/large (14B+) → `loop` | Default — seleciona pelo perfil do modelo |
+
+`--mode auto` detecta o tamanho do modelo e seleciona o modo mais adequado:
+- **7B (small):** `multi` — 3 prompts fixos, resultados mais estáveis
+- **14B+ (medium/large):** `loop` — LLM com mais capacidade decide o que investigar
 
 ### Modo loop — ações tipadas
 
@@ -258,8 +262,9 @@ Classificação esperada: `tipo::prazo-expirado` (prazo de 10 dias para avaliaç
 | **qwen2.5-coder:7b** | **multi** | **`tipo::prazo-expirado`** | **✅** | Prompts com orientação + evidência focal |
 | qwen2.5-coder:7b | loop v1 | `Bug::Avaliação Não Preenchida` | ❌ | Confundiu TEMPO_PREENCHIMENTO com TEMPO_AVALIACAO |
 | qwen2.5-coder:7b | loop v2 | `tipo::permissao-nao-autorizada` | ❌ | Foi direto para CLASSIFICAR sem investigar |
+| qwen2.5:14b | single | — | ⏳ | A testar — prompt completo (~20K chars) |
 | qwen2.5:14b | multi | — | ⏳ | A testar |
-| qwen2.5:14b | loop | — | ⏳ | A testar |
+| qwen2.5:14b | loop | — | ⏳ | A testar — auto seleciona este |
 
 Detalhes de cada execução: [issue #15](https://github.com/jailtoncarlos/incident-analyst-agent/issues/15).
 
