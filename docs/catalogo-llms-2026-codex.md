@@ -25,61 +25,186 @@ custo_BRL = custo_USD * 4,9905
 
 ## Tabela mestre
 
-Legenda de qualidade: ★ fraco, ★★ aceitável, ★★★ bom, ★★★★ muito bom, ★★★★★ frontier.  
+Legenda de qualidade: ★ fraco, ★★ aceitável, ★★★ bom, ★★★★ muito bom, ★★★★★ frontier.
+Preço I/O em USD por 1M tokens. Informações complementares (arquitetura, API, observações) logo abaixo de cada sub-tabela.
 API: `OA` = OpenAI-compatible, `Nativa` = SDK/API própria.
 
-| Modelo | Provedor/API | Origem | Tipo | Contexto | Tamanho/arquitetura | Input | Output | IAC US$ | Qual. IAC | API | Observações |
-|---|---|---:|---|---:|---|---:|---:|---:|---:|---|---|
-| GPT-4o | OpenAI | EUA | proprietário, multimodal | 128K | closed/dense? | 2.50 | 10.00 | 0.0400 | ★★★★ | Nativa/OA | Legado útil; API mantida, ChatGPT aposentou. |
-| GPT-4o mini | OpenAI | EUA | proprietário, baixo custo | 128K | closed | 0.15 | 0.60 | 0.0024 | ★★★ | Nativa/OA | Excelente triagem barata. |
-| GPT-4.1 | OpenAI | EUA | proprietário, código | 1.05M | closed | 2.00 | 8.00 | 0.0320 | ★★★★ | Nativa/OA | Forte em código; SWE-bench Verified 54,6% divulgado. |
-| o3 | OpenAI | EUA | proprietário, reasoning | ⚠️ não verificado | closed | 2.00 | 8.00 | 0.0320 | ★★★★★ | Nativa/OA | Melhor quando há análise causal difícil. |
-| o3-mini | OpenAI | EUA | proprietário, reasoning barato | ⚠️ não verificado | closed | 1.10 | 4.40 | 0.0176 | ★★★★ | Nativa/OA | Boa opção de fallback reasoning. |
-| o1 | OpenAI | EUA | proprietário, reasoning premium legado | ⚠️ não verificado | closed | 15.00 | 60.00 | 0.2400 | ★★★★ | Nativa/OA | Caro; evitar salvo compatibilidade antiga. |
-| Codex mini / GPT Codex | OpenAI | EUA | code-specialized | 256K-? | closed | 1.50 | 6.00 | 0.0240 | ★★★★ | Nativa/OA | Para edição/agentes de código; há variantes GPT-5.1 Codex mini mais baratas. |
-| Claude Opus 4.6 | Anthropic | EUA | proprietário, reasoning/código | 1M beta | closed | 5.00 | 25.00 | 0.0900 | ★★★★★ | Nativa | Premium; melhor para issues críticas. |
-| Claude Sonnet 4.6 | Anthropic | EUA | proprietário, coding/agentic | 1M beta | closed | 3.00 | 15.00 | 0.0540 | ★★★★★ | Nativa | Melhor default premium para IAC. |
-| Claude Haiku 4.5 | Anthropic | EUA | proprietário, rápido | ⚠️ não verificado | closed | 1.00 | 5.00 | 0.0180 | ★★★★ | Nativa | Boa triagem com qualidade acima do preço. |
-| Gemini 2.5 Pro | Google | EUA | proprietário, multimodal/reasoning | 1M | closed | 1.25 | 10.00 | 0.0300 | ★★★★★ | Nativa/OA parcial | Ótimo long-context; output caro. |
-| Gemini 2.5 Flash | Google | EUA | proprietário, baixo custo/reasoning | 1M | closed | 0.30 | 2.50 | 0.0074 | ★★★★ | Nativa/OA parcial | Melhor custo-benefício geral. |
-| Gemini 2.0 Flash | Google | EUA | proprietário, multimodal barato | 1M | closed | 0.10 | 0.40 | 0.0016 | ★★★ | Nativa/OA parcial | Fortíssimo para volume e testes pagos. |
-| Llama 3.3 70B | Meta via Groq/Together | EUA | open-weights | 128K | 70B dense | 0.59-0.88 | 0.79-0.88 | 0.0063-0.0088 | ★★★ | OA via provedor | Boa alternativa barata; menos forte que Sonnet/GPT em RCA complexo. |
-| Llama 3.1 405B | Meta via provedores | EUA | open-weights | 128K | 405B dense | variável | variável | ⚠️ | ★★★★ | OA via provedor | Peso público; caro de hospedar. |
-| Llama 3.1 70B | Meta via provedores | EUA | open-weights | 128K | 70B dense | variável | variável | ⚠️ | ★★★ | OA via provedor | Superado por 3.3 70B na maioria dos usos. |
-| Llama 3.1 8B | Meta via Groq/local | EUA | open-weights, small | 128K | 8B dense | 0.05 | 0.08 | 0.0006 | ★★ | OA/local | Bom para testes, ruim para análise causal profunda. |
-| Llama 4 Scout | Meta via Groq/Together | EUA | open-weights, multimodal | 10M | MoE 109B total/17B ativo | 0.11 | 0.34 | 0.0016 | ★★★★ | OA via provedor | Muito interessante para contexto enorme. |
-| Llama 4 Maverick | Meta via provedores | EUA | open-weights, multimodal | 1M | MoE ~400B/17B ativo | variável | variável | ⚠️ | ★★★★ | OA via provedor | Mais forte que Scout; disponibilidade/preço variam. |
-| Mistral Large 2.1 | Mistral | Europa | proprietário legado | 128K | closed | 2.00 | 6.00 | 0.0280 | ★★★★ | Nativa/OA | Legado; Large 3 é open-weight mais novo. |
-| Mistral Medium 3.1 | Mistral | Europa | proprietário | ⚠️ | closed | ⚠️ | ⚠️ | ⚠️ | ★★★★ | Nativa/OA | Preço oficial não verificado no crawl; modelo recomendado pela Mistral. |
-| Mistral Small 4 | Mistral | Europa | open-weights, hybrid | 256K | MoE 119B/6.5B ativo | 0.15 | 0.60 | 0.0024 | ★★★★ | Nativa/OA | Forte opção europeia e barata. |
-| Mixtral 8x7B | Mistral/Together | Europa | open-weights | 32K | MoE ~47B/13B ativo | 0.60 | 0.60 | 0.0060 | ★★ | OA via provedor | Legado; evitar para IAC moderno. |
-| Mixtral 8x22B | Mistral/Fireworks | Europa | open-weights | 64K | MoE ~141B/39B ativo | ~1.20 | ~1.20 | 0.0120 | ★★★ | OA via provedor | Ainda útil, mas superado por Small 4/DeepSeek. |
-| Codestral 25.08 | Mistral | Europa | code-specialized | 128K | closed/premier | 0.30 | 0.90 | 0.0042 | ★★★★ | Nativa/OA | Bom para FIM/código; não é melhor RCA geral. |
-| DeepSeek V3/V3.1 | DeepSeek/provedores | China | open-weights | 64K-128K | MoE 671B/37B ativo | 0.28-0.60 | 0.42-1.70 | 0.0031-0.0082 | ★★★★ | OA | Excelente custo/qualidade; cautela LGPD. |
-| DeepSeek Coder | DeepSeek/provedores | China | open-weights, código | variável | variável | ⚠️ | ⚠️ | ⚠️ | ★★★★ | OA/local | Bom local; preço oficial atual não verificado. |
-| DeepSeek Reasoner/R1 | DeepSeek | China | open-weights/reasoning | 128K | MoE | 0.28-0.55 | 0.42-2.19 | 0.0031-0.0088 | ★★★★★ | OA | Muito bom em custo; output reasoning pode inflar. |
-| Qwen 2.5 72B | Alibaba/provedores | China | open-weights | 128K | 72B dense | variável | variável | ⚠️ | ★★★★ | OA/local | Bom para código e pt-BR; preço depende do host. |
-| Qwen 2.5 32B | Alibaba/provedores | China | open-weights | 128K | 32B dense | variável | variável | ⚠️ | ★★★ | OA/local | Ótimo local/baixo custo. |
-| Qwen 2.5 14B | Alibaba/provedores | China | open-weights | 128K | 14B dense | variável | variável | ⚠️ | ★★ | OA/local | Testes e dev local. |
-| Qwen 2.5 7B | Alibaba/provedores | China | open-weights | 128K | 7B dense | 0.30 Together | 0.30 | 0.0030 | ★★ | OA/local | Apenas triagem simples. |
-| Qwen3 32B | Groq/Alibaba/provedores | China | open-weights/reasoning | 131K | 32B dense | 0.29 Groq | 0.59 | 0.0035 | ★★★★ | OA via provedor | Bom custo e latência no Groq. |
-| Qwen3 235B | Alibaba/provedores | China | open-weights/MoE | 128K+ | MoE 235B/A22B | variável | variável | ⚠️ | ★★★★ | OA | Forte; preço oficial por variante DashScope é confuso. |
-| Qwen-Coder | Alibaba | China | code-specialized | até 1M em qwen3-coder | MoE/dense por versão | 1.00+ | 5.00+ | 0.0180+ | ★★★★ | OA | Caro em janelas longas; bom em agentic coding. |
-| QwQ | Alibaba/provedores | China | reasoning | 32K-128K | 32B | variável | variável | ⚠️ | ★★★ | OA/local | Superado por Qwen3 reasoning/DeepSeek R1. |
-| MiniMax abab6.5 | MiniMax | China | proprietário legado | ⚠️ | closed | ⚠️ | ⚠️ | ⚠️ | ★★★ | OA parcial | Legado; docs atuais priorizam M2.x. |
-| MiniMax M1 | MiniMax | China | open-weight reasoning | 1M | MoE 456B/45.9B ativo | 0.40* | 2.20* | 0.0076 | ★★★★ | OA/Anthropic compat | *Preço não oficial direto; pesos e specs oficiais. |
-| MiniMax M2.5 | MiniMax | China | proprietário, código/agentic | 204.8K | closed | 0.30 Fireworks/Together | 1.20 | 0.0048 | ★★★★ | OA/Anthropic compat | Docs oficiais confirmam 60-100 tps. |
-| Grok 2 | xAI | EUA | proprietário legado | ⚠️ | closed | ⚠️ | ⚠️ | ⚠️ | ★★★ | OA | Substituído por Grok 3/4. |
-| Grok 3 | xAI | EUA | proprietário | 131K | closed | 3.00 | 15.00 | 0.0540 | ★★★★ | OA | Mesmo preço de Sonnet; menos atraente para IAC. |
-| Grok 4 | xAI | EUA | proprietário reasoning | 256K | closed | 3.00 | 15.00 | 0.0540 | ★★★★ | OA | Bom, mas Grok 4.20/4.1 Fast já mudaram o cenário. |
-| Grok 4.20 | xAI | EUA | proprietário agentic | 2M | closed | 2.00 | 6.00 | 0.0280 | ★★★★ | OA | Atual flagship listado pela xAI; incluir como sucessor prático. |
-| Cohere Command R+ | Cohere | Canadá/EUA | proprietário RAG/tool | 128K | closed | 2.50 | 10.00 | 0.0400 | ★★★ | Nativa | Forte em RAG/citações; caro frente a Flash. |
-| Cohere Command R | Cohere | Canadá/EUA | proprietário RAG barato | 128K | closed | 0.15 | 0.60 | 0.0024 | ★★★ | Nativa | Bom para extração e RAG simples. |
-| AI21 Jamba 1.5 Large | AI21 | Israel | open-weights | 256K | hybrid SSM-Transformer MoE 398B/94B | 2.00 | 8.00 | 0.0320 | ★★★ | Nativa/Bedrock | Long-context bom; ecossistema menor. |
-| AI21 Jamba 1.5 Mini | AI21 | Israel | open-weights | 256K | hybrid MoE 52B/12B | 0.20 | 0.40 | 0.0024 | ★★★ | Nativa/Bedrock | Barato, bom para documentos longos simples. |
-| Zhipu GLM-4/4.5 | Zhipu | China | open/proprietário por versão | 128K | GLM-4.5 MoE 355B/32B | 0.60* | 2.20* | 0.0092 | ★★★★ | OA | *Preço de agregador; confirmar no console oficial. |
-| Moonshot Kimi K2 | Moonshot | China | open-weights/MoE | 128K-256K | 1T/32B ativo | 0.15-0.60 | 2.00-2.50 | 0.0062 | ★★★★ | OA/Anthropic compat | Bom para agentes/código; origem China. |
-| 01.AI Yi | 01.AI | China | open-weights | 32K-200K | 6B-34B+ | ⚠️ | ⚠️ | ⚠️ | ★★ | OA via host | Menos relevante em 2026; evitar salvo legado/local. |
+### OpenAI (EUA)
+
+| Modelo | Perfil | Contexto | Preço I/O | IAC US$ | Qual. |
+|---|---|---:|---:|---:|---:|
+| GPT-4o | multimodal | 128K | 2.50 / 10.00 | 0.0400 | ★★★★ |
+| GPT-4o mini | baixo custo | 128K | 0.15 / 0.60 | 0.0024 | ★★★ |
+| GPT-4.1 | código | 1.05M | 2.00 / 8.00 | 0.0320 | ★★★★ |
+| o3 | reasoning | ⚠️ | 2.00 / 8.00 | 0.0320 | ★★★★★ |
+| o3-mini | reasoning barato | ⚠️ | 1.10 / 4.40 | 0.0176 | ★★★★ |
+| o1 | reasoning legado | ⚠️ | 15.00 / 60.00 | 0.2400 | ★★★★ |
+| Codex mini / GPT Codex | code-specialized | 256K-? | 1.50 / 6.00 | 0.0240 | ★★★★ |
+
+**Complementares:**
+- **GPT-4o** — closed/dense · API Nativa/OA · Legado útil; API mantida, ChatGPT aposentou.
+- **GPT-4o mini** — closed · API Nativa/OA · Excelente triagem barata.
+- **GPT-4.1** — closed · API Nativa/OA · Forte em código; SWE-bench Verified 54,6% divulgado.
+- **o3** — closed · API Nativa/OA · Melhor quando há análise causal difícil.
+- **o3-mini** — closed · API Nativa/OA · Boa opção de fallback reasoning.
+- **o1** — closed · API Nativa/OA · Caro; evitar salvo compatibilidade antiga.
+- **Codex mini / GPT Codex** — closed · API Nativa/OA · Para edição/agentes de código; há variantes GPT-5.1 Codex mini mais baratas.
+
+### Anthropic (EUA)
+
+| Modelo | Perfil | Contexto | Preço I/O | IAC US$ | Qual. |
+|---|---|---:|---:|---:|---:|
+| Claude Opus 4.6 | reasoning/código | 1M beta | 5.00 / 25.00 | 0.0900 | ★★★★★ |
+| Claude Sonnet 4.6 | coding/agentic | 1M beta | 3.00 / 15.00 | 0.0540 | ★★★★★ |
+| Claude Haiku 4.5 | rápido | ⚠️ | 1.00 / 5.00 | 0.0180 | ★★★★ |
+
+**Complementares:**
+- **Claude Opus 4.6** — closed · API Nativa · Premium; melhor para issues críticas.
+- **Claude Sonnet 4.6** — closed · API Nativa · Melhor default premium para IAC.
+- **Claude Haiku 4.5** — closed · API Nativa · Boa triagem com qualidade acima do preço.
+
+### Google Gemini (EUA)
+
+| Modelo | Perfil | Contexto | Preço I/O | IAC US$ | Qual. |
+|---|---|---:|---:|---:|---:|
+| Gemini 2.5 Pro | multimodal/reasoning | 1M | 1.25 / 10.00 | 0.0300 | ★★★★★ |
+| Gemini 2.5 Flash | baixo custo/reasoning | 1M | 0.30 / 2.50 | 0.0074 | ★★★★ |
+| Gemini 2.0 Flash | multimodal barato | 1M | 0.10 / 0.40 | 0.0016 | ★★★ |
+
+**Complementares:**
+- **Gemini 2.5 Pro** — closed · API Nativa/OA parcial · Ótimo long-context; output caro.
+- **Gemini 2.5 Flash** — closed · API Nativa/OA parcial · Melhor custo-benefício geral.
+- **Gemini 2.0 Flash** — closed · API Nativa/OA parcial · Fortíssimo para volume e testes pagos.
+
+### Meta Llama (EUA)
+
+| Modelo | Perfil | Contexto | Preço I/O | IAC US$ | Qual. |
+|---|---|---:|---:|---:|---:|
+| Llama 3.3 70B | open-weights | 128K | 0.59-0.88 / 0.79-0.88 | 0.0063-0.0088 | ★★★ |
+| Llama 3.1 405B | open-weights | 128K | variável | ⚠️ | ★★★★ |
+| Llama 3.1 70B | open-weights | 128K | variável | ⚠️ | ★★★ |
+| Llama 3.1 8B | open-weights small | 128K | 0.05 / 0.08 | 0.0006 | ★★ |
+| Llama 4 Scout | open-weights multimodal | 10M | 0.11 / 0.34 | 0.0016 | ★★★★ |
+| Llama 4 Maverick | open-weights multimodal | 1M | variável | ⚠️ | ★★★★ |
+
+**Complementares:**
+- **Llama 3.3 70B** — 70B dense · Meta via Groq/Together · API OA via provedor · Boa alternativa barata; menos forte que Sonnet/GPT em RCA complexo.
+- **Llama 3.1 405B** — 405B dense · Meta via provedores · API OA via provedor · Peso público; caro de hospedar.
+- **Llama 3.1 70B** — 70B dense · Meta via provedores · API OA via provedor · Superado por 3.3 70B na maioria dos usos.
+- **Llama 3.1 8B** — 8B dense · Meta via Groq/local · API OA/local · Bom para testes, ruim para análise causal profunda.
+- **Llama 4 Scout** — MoE 109B total/17B ativo · Meta via Groq/Together · API OA via provedor · Muito interessante para contexto enorme.
+- **Llama 4 Maverick** — MoE ~400B/17B ativo · Meta via provedores · API OA via provedor · Mais forte que Scout; disponibilidade/preço variam.
+
+### Mistral AI (Europa)
+
+| Modelo | Perfil | Contexto | Preço I/O | IAC US$ | Qual. |
+|---|---|---:|---:|---:|---:|
+| Mistral Large 2.1 | proprietário legado | 128K | 2.00 / 6.00 | 0.0280 | ★★★★ |
+| Mistral Medium 3.1 | proprietário | ⚠️ | ⚠️ / ⚠️ | ⚠️ | ★★★★ |
+| Mistral Small 4 | open-weights hybrid | 256K | 0.15 / 0.60 | 0.0024 | ★★★★ |
+| Mixtral 8x7B | open-weights | 32K | 0.60 / 0.60 | 0.0060 | ★★ |
+| Mixtral 8x22B | open-weights | 64K | ~1.20 / ~1.20 | 0.0120 | ★★★ |
+| Codestral 25.08 | code-specialized | 128K | 0.30 / 0.90 | 0.0042 | ★★★★ |
+
+**Complementares:**
+- **Mistral Large 2.1** — closed · API Nativa/OA · Legado; Large 3 é open-weight mais novo.
+- **Mistral Medium 3.1** — closed · API Nativa/OA · Preço oficial não verificado no crawl; modelo recomendado pela Mistral.
+- **Mistral Small 4** — MoE 119B/6.5B ativo · API Nativa/OA · Forte opção europeia e barata.
+- **Mixtral 8x7B** — MoE ~47B/13B ativo · Mistral/Together · API OA via provedor · Legado; evitar para IAC moderno.
+- **Mixtral 8x22B** — MoE ~141B/39B ativo · Mistral/Fireworks · API OA via provedor · Ainda útil, mas superado por Small 4/DeepSeek.
+- **Codestral 25.08** — closed/premier · API Nativa/OA · Bom para FIM/código; não é melhor RCA geral.
+
+### DeepSeek (China)
+
+| Modelo | Perfil | Contexto | Preço I/O | IAC US$ | Qual. |
+|---|---|---:|---:|---:|---:|
+| DeepSeek V3/V3.1 | open-weights | 64K-128K | 0.28-0.60 / 0.42-1.70 | 0.0031-0.0082 | ★★★★ |
+| DeepSeek Coder | open-weights código | variável | ⚠️ / ⚠️ | ⚠️ | ★★★★ |
+| DeepSeek Reasoner/R1 | open-weights reasoning | 128K | 0.28-0.55 / 0.42-2.19 | 0.0031-0.0088 | ★★★★★ |
+
+**Complementares:**
+- **DeepSeek V3/V3.1** — MoE 671B/37B ativo · DeepSeek/provedores · API OA · Excelente custo/qualidade; cautela LGPD.
+- **DeepSeek Coder** — variável · DeepSeek/provedores · API OA/local · Bom local; preço oficial atual não verificado.
+- **DeepSeek Reasoner/R1** — MoE · API OA · Muito bom em custo; output reasoning pode inflar.
+
+### Alibaba Qwen (China)
+
+| Modelo | Perfil | Contexto | Preço I/O | IAC US$ | Qual. |
+|---|---|---:|---:|---:|---:|
+| Qwen 2.5 72B | open-weights | 128K | variável | ⚠️ | ★★★★ |
+| Qwen 2.5 32B | open-weights | 128K | variável | ⚠️ | ★★★ |
+| Qwen 2.5 14B | open-weights | 128K | variável | ⚠️ | ★★ |
+| Qwen 2.5 7B | open-weights | 128K | 0.30 / 0.30 (Together) | 0.0030 | ★★ |
+| Qwen3 32B | open-weights reasoning | 131K | 0.29 / 0.59 (Groq) | 0.0035 | ★★★★ |
+| Qwen3 235B | open-weights/MoE | 128K+ | variável | ⚠️ | ★★★★ |
+| Qwen-Coder | code-specialized | até 1M em qwen3-coder | 1.00+ / 5.00+ | 0.0180+ | ★★★★ |
+| QwQ | reasoning | 32K-128K | variável | ⚠️ | ★★★ |
+
+**Complementares:**
+- **Qwen 2.5 72B** — 72B dense · Alibaba/provedores · API OA/local · Bom para código e pt-BR; preço depende do host.
+- **Qwen 2.5 32B** — 32B dense · Alibaba/provedores · API OA/local · Ótimo local/baixo custo.
+- **Qwen 2.5 14B** — 14B dense · Alibaba/provedores · API OA/local · Testes e dev local.
+- **Qwen 2.5 7B** — 7B dense · Alibaba/provedores · API OA/local · Apenas triagem simples.
+- **Qwen3 32B** — 32B dense · Groq/Alibaba/provedores · API OA via provedor · Bom custo e latência no Groq.
+- **Qwen3 235B** — MoE 235B/A22B · Alibaba/provedores · API OA · Forte; preço oficial por variante DashScope é confuso.
+- **Qwen-Coder** — MoE/dense por versão · Alibaba · API OA · Caro em janelas longas; bom em agentic coding.
+- **QwQ** — 32B · Alibaba/provedores · API OA/local · Superado por Qwen3 reasoning/DeepSeek R1.
+
+### MiniMax (China)
+
+| Modelo | Perfil | Contexto | Preço I/O | IAC US$ | Qual. |
+|---|---|---:|---:|---:|---:|
+| MiniMax abab6.5 | proprietário legado | ⚠️ | ⚠️ / ⚠️ | ⚠️ | ★★★ |
+| MiniMax M1 | open-weight reasoning | 1M | 0.40* / 2.20* | 0.0076 | ★★★★ |
+| MiniMax M2.5 | proprietário código/agentic | 204.8K | 0.30 / 1.20 (Fireworks/Together) | 0.0048 | ★★★★ |
+
+**Complementares:**
+- **MiniMax abab6.5** — closed · API OA parcial · Legado; docs atuais priorizam M2.x.
+- **MiniMax M1** — MoE 456B/45.9B ativo · API OA/Anthropic compat · *Preço não oficial direto; pesos e specs oficiais.
+- **MiniMax M2.5** — closed · API OA/Anthropic compat · Docs oficiais confirmam 60-100 tps.
+
+### xAI (EUA)
+
+| Modelo | Perfil | Contexto | Preço I/O | IAC US$ | Qual. |
+|---|---|---:|---:|---:|---:|
+| Grok 2 | proprietário legado | ⚠️ | ⚠️ / ⚠️ | ⚠️ | ★★★ |
+| Grok 3 | proprietário | 131K | 3.00 / 15.00 | 0.0540 | ★★★★ |
+| Grok 4 | proprietário reasoning | 256K | 3.00 / 15.00 | 0.0540 | ★★★★ |
+| Grok 4.20 | proprietário agentic | 2M | 2.00 / 6.00 | 0.0280 | ★★★★ |
+
+**Complementares:**
+- **Grok 2** — closed · API OA · Substituído por Grok 3/4.
+- **Grok 3** — closed · API OA · Mesmo preço de Sonnet; menos atraente para IAC.
+- **Grok 4** — closed · API OA · Bom, mas Grok 4.20/4.1 Fast já mudaram o cenário.
+- **Grok 4.20** — closed · API OA · Atual flagship listado pela xAI; incluir como sucessor prático.
+
+### Cohere e AI21
+
+| Modelo | Origem | Perfil | Contexto | Preço I/O | IAC US$ | Qual. |
+|---|---|---|---:|---:|---:|---:|
+| Cohere Command R+ | Canadá/EUA | RAG/tool | 128K | 2.50 / 10.00 | 0.0400 | ★★★ |
+| Cohere Command R | Canadá/EUA | RAG barato | 128K | 0.15 / 0.60 | 0.0024 | ★★★ |
+| AI21 Jamba 1.5 Large | Israel | open-weights long-context | 256K | 2.00 / 8.00 | 0.0320 | ★★★ |
+| AI21 Jamba 1.5 Mini | Israel | open-weights | 256K | 0.20 / 0.40 | 0.0024 | ★★★ |
+
+**Complementares:**
+- **Cohere Command R+** — closed · API Nativa · Forte em RAG/citações; caro frente a Flash.
+- **Cohere Command R** — closed · API Nativa · Bom para extração e RAG simples.
+- **AI21 Jamba 1.5 Large** — hybrid SSM-Transformer MoE 398B/94B · API Nativa/Bedrock · Long-context bom; ecossistema menor.
+- **AI21 Jamba 1.5 Mini** — hybrid MoE 52B/12B · API Nativa/Bedrock · Barato, bom para documentos longos simples.
+
+### Chineses adicionais (China)
+
+| Modelo | Perfil | Contexto | Preço I/O | IAC US$ | Qual. |
+|---|---|---:|---:|---:|---:|
+| Zhipu GLM-4/4.5 | open/proprietário por versão | 128K | 0.60* / 2.20* | 0.0092 | ★★★★ |
+| Moonshot Kimi K2 | open-weights/MoE | 128K-256K | 0.15-0.60 / 2.00-2.50 | 0.0062 | ★★★★ |
+| 01.AI Yi | open-weights | 32K-200K | ⚠️ / ⚠️ | ⚠️ | ★★ |
+
+**Complementares:**
+- **Zhipu GLM-4/4.5** — GLM-4.5 MoE 355B/32B · API OA · *Preço de agregador; confirmar no console oficial.
+- **Moonshot Kimi K2** — 1T/32B ativo · API OA/Anthropic compat · Bom para agentes/código; origem China.
+- **01.AI Yi** — 6B-34B+ · API OA via host · Menos relevante em 2026; evitar salvo legado/local.
 
 Fontes principais do bloco: OpenAI pricing/model docs, Anthropic pricing/news/rate-limit docs, Google Gemini pricing, Groq pricing, Together pricing, Fireworks pricing, DeepSeek docs, Mistral docs, Cohere docs, AI21 pricing/research, xAI docs/API page, Alibaba Model Studio pricing, MiniMax docs/news, Meta/Hugging Face model cards, OpenRouter pricing/rate limits, Hugging Face pricing, Replicate pricing, Perplexity pricing.
 
