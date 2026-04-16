@@ -9,8 +9,8 @@ Retry automático com backoff quando 429 é retornado.
 
 Variáveis de ambiente:
     GROQ_API_KEY       — API key (obrigatória)
-    GROQ_RATE_DELAY    — Delay em segundos entre chamadas (default: 0)
-    GROQ_MAX_RETRIES   — Máximo de retries em rate limit (default: 3)
+    IAC_LLM_RATE_DELAY  — Delay em segundos entre chamadas (genérico, no runner)
+    IAC_LLM_MAX_RETRIES — Máximo de retries em rate limit (default: 3)
 """
 
 from __future__ import annotations

@@ -18,12 +18,12 @@ from pydantic import BaseModel, Field
 class Classification(BaseModel):
     """Metadados extraídos da issue pelo classifier (sem LLM)."""
 
-    origem: str | None = Field(None, description='erro-suap | sentry | reporte-manual')
-    app: str | None = Field(None, description='App Django (ex: centralservicos)')
-    view: str | None = Field(None, description='FQN da view (ex: centralservicos.views.visualizar_chamado)')
+    origem: str | None = Field(None, description='erro-sistema | sentry | reporte-manual')
+    app: str | None = Field(None, description='App do framework (ex: loja)')
+    view: str | None = Field(None, description='FQN da view (ex: loja.views.detalhe_produto)')
     url_erro: str | None = Field(None, description='URL com erro reportada')
     interessado: str | None = Field(None, description='Nome + matrícula do interessado')
-    erro_id: str | None = Field(None, description='ID do erro SUAP (ex: 9645)')
+    erro_id: str | None = Field(None, description='ID do erro no sistema (ex: 9645)')
     descricao_usuario: str | None = Field(None, description='Texto livre do usuário')
     sentry_url: str | None = Field(None, description='URL do Sentry se presente')
     traceback: str | None = Field(None, description='Traceback/stacktrace extraído')

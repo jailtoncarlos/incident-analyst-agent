@@ -3,16 +3,23 @@
 Princípio 1 — Explícito sobre Implícito:
 todas as configurações tipadas, com defaults explícitos e validação.
 
-Hierarquia: defaults → config.yaml → variáveis de ambiente → CLI args.
+Hierarquia: defaults → .env → variáveis de ambiente → CLI args.
 
 Variáveis de ambiente aceitas:
-    GROQ_API_KEY     — API key do Groq (gratuito)
-    GITLAB_TOKEN     — Access token do GitLab
-    GEMINI_API_KEY   — API key do Google Gemini
-    IAC_LLM_BACKEND  — Backend LLM (ollama, groq, gemini)
-    IAC_LLM_MODEL    — Nome do modelo
-    IAC_LLM_URL      — Endpoint da API
-    IAC_LLM_KEY      — API key genérica (fallback)
+    GITLAB_TOKEN        — Access token do GitLab
+    IAC_LLM_BACKEND     — Backend LLM (ollama, groq, deepseek, gemini)
+    IAC_LLM_MODEL       — Nome do modelo
+    IAC_LLM_URL         — Endpoint genérico (fallback)
+    IAC_LLM_KEY         — API key genérica (fallback)
+    IAC_LLM_RATE_DELAY  — Delay entre chamadas em segundos (0 = sem delay)
+    IAC_LLM_MAX_RETRIES — Máximo de retries em rate limit (default: 3)
+    IAC_ANALYZE_MODE    — Modo de análise (auto, single, multi, loop)
+    GROQ_API_KEY        — API key do Groq
+    DEEPSEEK_API_KEY    — API key do DeepSeek
+    GEMINI_API_KEY      — API key do Google Gemini
+    GROQ_API_URL        — Endpoint do Groq (opcional)
+    DEEPSEEK_API_URL    — Endpoint do DeepSeek (opcional)
+    GEMINI_API_URL      — Endpoint do Gemini (opcional)
 """
 
 from __future__ import annotations
@@ -24,8 +31,27 @@ from pydantic_settings import BaseSettings
 
 
 def _resolve_llm_key() -> str | None:
-    """Resolve API key pela ordem: GROQ_API_KEY → DEEPSEEK_API_KEY → GEMINI_API_KEY → IAC_LLM_KEY."""
+    """Resolve API key pelo backend configurado, ou fallback genérico."""
+    backend = os.environ.get('IAC_LLM_BACKEND', '')
+    backend_keys = {'groq': 'GROQ_API_KEY', 'deepseek': 'DEEPSEEK_API_KEY', 'gemini': 'GEMINI_API_KEY'}
+    if backend in backend_keys:
+        return os.environ.get(backend_keys[backend]) or os.environ.get('IAC_LLM_KEY')
     return os.environ.get('GROQ_API_KEY') or os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('GEMINI_API_KEY') or os.environ.get('IAC_LLM_KEY')
+
+
+def _resolve_llm_url() -> str:
+    """Resolve endpoint pelo backend configurado, com fallback genérico."""
+    backend = os.environ.get('IAC_LLM_BACKEND', '')
+    backend_urls = {
+        'groq': 'GROQ_API_URL',
+        'deepseek': 'DEEPSEEK_API_URL',
+        'gemini': 'GEMINI_API_URL',
+    }
+    if backend in backend_urls:
+        value = os.environ.get(backend_urls[backend])
+        if value:
+            return value
+    return os.environ.get('IAC_LLM_URL', 'http://localhost:11434/v1/chat/completions')
 
 
 def _resolve_gitlab_token() -> str | None:
@@ -36,13 +62,15 @@ def _resolve_gitlab_token() -> str | None:
 class LLMSettings(BaseSettings):
     """Configurações do backend LLM."""
 
-    backend: str = Field('ollama', description='Backend: ollama | groq | gemini')
+    backend: str = Field('ollama', description='Backend: ollama | groq | deepseek | gemini')
     model: str = Field('qwen2.5:7b', description='Nome do modelo')
-    url: str = Field('http://localhost:11434/v1/chat/completions', description='Endpoint da API')
-    key: str | None = Field(default_factory=_resolve_llm_key, description='API key (GROQ_API_KEY, GEMINI_API_KEY ou IAC_LLM_KEY)')
+    url: str = Field(default_factory=_resolve_llm_url, description='Endpoint da API')
+    key: str | None = Field(default_factory=_resolve_llm_key, description='API key (GROQ_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY ou IAC_LLM_KEY)')
     max_tokens: int = Field(4000, description='Máximo de tokens na resposta')
     temperature: float = Field(0.2, description='Temperatura do modelo')
     timeout: int = Field(1200, description='Timeout em segundos')
+    rate_delay: int = Field(0, description='Delay entre chamadas em segundos (0 = sem delay)')
+    max_retries: int = Field(3, description='Máximo de retries em rate limit')
 
     model_config = {'env_prefix': 'IAC_LLM_'}
 

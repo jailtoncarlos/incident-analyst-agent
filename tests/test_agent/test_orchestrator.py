@@ -215,7 +215,7 @@ def test_structural_analysis_has_components(django_project):
     assert analysis['app'] == 'loja'
     assert analysis['view'] == 'loja.views.detalhe_produto'
     assert analysis['file'] is not None
-    assert analysis['origem'] == 'erro-suap'
+    assert analysis['origem'] == 'erro-sistema'
     assert analysis['erro_id'] == '1234'
     assert 'produto não carrega' in (analysis['descricao_usuario'] or '')
 

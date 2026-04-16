@@ -1,17 +1,15 @@
-"""Utilitários de prompts — extração de tipo e compactação de código."""
+"""Utilitários de prompts — extração de tipo, taxonomia e compactação de código.
+
+Toda taxonomia (known_tipos, aliases) vem do profile (.iac/profile.yaml).
+Se nenhum profile for fornecido, usa defaults de settings.py.
+"""
 
 from __future__ import annotations
 
 import re
 import unicodedata
 
-KNOWN_TIPOS = {
-    'tipo::bug',
-    'tipo::configuracao',
-    'tipo::dados-cadastrais',
-    'tipo::prazo-expirado',
-    'tipo::nao-e-erro',
-}
+from iac.config.settings import DEFAULT_ALIASES, DEFAULT_KNOWN_TIPOS
 
 
 def _normalize_label(raw: str) -> str:
@@ -23,60 +21,42 @@ def _normalize_label(raw: str) -> str:
     Returns:
         Label normalizado (ex: 'tipo::avaliacao-nao-preenchida').
     """
-    # Remover markdown
     raw = raw.strip('*').strip('`').strip()
 
-    # Separar prefixo e nome
     if '::' in raw:
         _prefix, nome = raw.split('::', 1)
     else:
         nome = raw
 
-    # Remover acentos
     nome = unicodedata.normalize('NFKD', nome).encode('ascii', 'ignore').decode('ascii')
-
-    # Lowercase, substituir espaços e underscores por hífens
     nome = nome.lower().strip()
     nome = re.sub(r'[\s_]+', '-', nome)
-
-    # Remover caracteres inválidos
     nome = re.sub(r'[^a-z0-9-]', '', nome)
-
-    # Remover hífens duplicados e nas pontas
     nome = re.sub(r'-+', '-', nome).strip('-')
 
     return f'tipo::{nome}' if nome else None
 
 
-def extract_tipo_from_analysis(analysis: str) -> str | None:
-    """Extrai o label principal de classificação da resposta do LLM.
-
-    Args:
-        analysis: Texto completo da resposta do LLM.
-
-    Returns:
-        Label tipo::* normalizado ou None.
-    """
-    result = extract_classificacao(analysis)
+def extract_tipo_from_analysis(analysis: str, profile: dict | None = None) -> str | None:
+    """Extrai o label principal de classificação da resposta do LLM."""
+    result = extract_classificacao(analysis, profile=profile)
     return result['classificacao']
 
 
-def extract_classificacao(analysis: str) -> dict:
+def extract_classificacao(analysis: str, profile: dict | None = None) -> dict:
     """Extrai classificação e subclassificação da resposta do LLM.
-
-    Procura padrões como::
-
-        CLASSIFICAÇÃO: tipo::nao-e-erro
-        SUBCLASSIFICAÇÃO: tipo::prazo-expirado
-
-    Ou formatos alternativos com markdown, prefixos variados, etc.
 
     Args:
         analysis: Texto completo da resposta do LLM.
+        profile: Perfil do cliente com taxonomy (known_tipos, aliases).
 
     Returns:
         Dict com classificacao (str|None) e subclassificacao (str|None).
     """
+    taxonomy = _get_taxonomy(profile)
+    known_tipos = taxonomy['known_tipos']
+    aliases = taxonomy['aliases']
+
     clean = analysis.replace('**', '').replace('`', '')
 
     classificacao = None
@@ -86,22 +66,16 @@ def extract_classificacao(analysis: str) -> dict:
     match = re.search(r'CLASSIFICA[CÇ][AÃ]O:\s*(.+?)(?:\n|/|$)', clean)
     if match:
         raw = match.group(1).strip()
-        if '::' in raw:
-            classificacao = _normalize_label(raw)
-        # Checar se tem subclassificação na mesma linha: CLASSIFICAÇÃO: x / SUBCLASSIFICAÇÃO: y
+        classificacao = _resolve_label(raw, known_tipos, aliases)
         sub_inline = re.search(r'SUBCLASSIFICA[CÇ][AÃ]O:\s*(.+?)(?:\n|$)', clean[match.end():])
         if sub_inline:
-            raw_sub = sub_inline.group(1).strip()
-            if '::' in raw_sub:
-                subclassificacao = _normalize_label(raw_sub)
+            subclassificacao = _resolve_label(sub_inline.group(1).strip(), known_tipos, aliases)
 
     # Fallback: SUBCLASSIFICAÇÃO em linha separada
     if not subclassificacao:
         match_sub = re.search(r'SUBCLASSIFICA[CÇ][AÃ]O:\s*(.+?)(?:\n|$)', clean)
         if match_sub:
-            raw_sub = match_sub.group(1).strip()
-            if '::' in raw_sub:
-                subclassificacao = _normalize_label(raw_sub)
+            subclassificacao = _resolve_label(match_sub.group(1).strip(), known_tipos, aliases)
 
     # Fallback: tipo::nome no texto (sem CLASSIFICAÇÃO:)
     if not classificacao:
@@ -109,48 +83,59 @@ def extract_classificacao(analysis: str) -> dict:
         if match_tipo:
             classificacao = match_tipo.group(1).strip()
 
+    # Normalizar para labels conhecidos
+    if classificacao and classificacao not in known_tipos:
+        classificacao = aliases.get(classificacao, classificacao)
+    if subclassificacao and subclassificacao not in known_tipos:
+        subclassificacao = aliases.get(subclassificacao, subclassificacao)
+
     return {
         'classificacao': classificacao,
         'subclassificacao': subclassificacao,
     }
 
 
-# Mapeamento de labels comuns fora do catálogo → label conhecido
-_LABEL_ALIASES = {
-    'tipo::avaliacao-nao-disponivel': 'tipo::prazo-expirado',
-    'tipo::prazo-avaliacao': 'tipo::prazo-expirado',
-    'tipo::tempo-expirado': 'tipo::prazo-expirado',
-    'tipo::tempo-esgotado': 'tipo::prazo-expirado',
-    'tipo::validacao-falhada': 'tipo::bug',
-    'tipo::logica-incorreta': 'tipo::bug',
-    'tipo::excecao-nao-tratada': 'tipo::bug',
-    'tipo::erro-de-codigo': 'tipo::bug',
-    'tipo::acesso-negado': 'tipo::permissao',
-    'tipo::sem-permissao': 'tipo::permissao',
-}
+def normalize_to_known(tipo: str, profile: dict | None = None) -> str | None:
+    """Normaliza label fora do catálogo para o mais próximo conhecido."""
+    taxonomy = _get_taxonomy(profile)
+    return taxonomy['aliases'].get(tipo)
 
 
-def normalize_to_known(tipo: str) -> str | None:
-    """Normaliza label fora do catálogo para o mais próximo conhecido.
+def _resolve_label(raw: str, known_tipos: set, aliases: dict) -> str | None:
+    """Resolve um label bruto — com ou sem prefixo tipo::."""
+    if '::' in raw:
+        normalized = _normalize_label(raw)
+        if normalized and normalized not in known_tipos:
+            normalized = aliases.get(normalized, normalized)
+        return normalized
 
-    Args:
-        tipo: Label tipo::* fora de KNOWN_TIPOS.
+    # Label "nu" — normalizar e tentar resolver
+    normalized = _normalize_label(f'tipo::{raw}')
+    if not normalized:
+        return None
+    if normalized in known_tipos:
+        return normalized
+    return aliases.get(normalized, normalized)
 
-    Returns:
-        Label conhecido ou None se não houver mapeamento.
-    """
-    return _LABEL_ALIASES.get(tipo)
+
+def _get_taxonomy(profile: dict | None) -> dict:
+    """Extrai taxonomia do profile ou retorna defaults."""
+    if profile and 'taxonomy' in profile:
+        tax = profile['taxonomy']
+        known = tax.get('known_tipos', DEFAULT_KNOWN_TIPOS)
+        als = tax.get('aliases', DEFAULT_ALIASES)
+        return {
+            'known_tipos': set(known) if not isinstance(known, set) else known,
+            'aliases': dict(als),
+        }
+    return {
+        'known_tipos': set(DEFAULT_KNOWN_TIPOS),
+        'aliases': dict(DEFAULT_ALIASES),
+    }
 
 
 def compact_code(source: str) -> str:
-    """Compacta código removendo docstrings, comentários e linhas em branco.
-
-    Args:
-        source: Código-fonte Python original.
-
-    Returns:
-        Código compactado.
-    """
+    """Compacta código removendo docstrings, comentários e linhas em branco."""
     lines = source.splitlines()
     result = []
     in_docstring = False

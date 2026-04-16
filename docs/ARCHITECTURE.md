@@ -8,11 +8,11 @@ Este projeto segue os 6 princípios da [Arquitetura AI-Native](https://lemon.dev
 
 | Princípio | Aplicação no IAC | Score |
 |-----------|-----------------|-------|
-| **1. Explícito sobre Implícito** | `AppSettings` (Pydantic Settings), `.env` com todas as variáveis, `KNOWN_TIPOS` + `_LABEL_ALIASES` codificam taxonomia, `MODEL_PROFILES` explícitos | ✅ |
+| **1. Explícito sobre Implícito** | `profile.yaml` configurável por projeto (taxonomia, rules, issue_patterns), `.env` com variáveis, `MODEL_PROFILES` explícitos | ✅ |
 | **2. Módulos < 400 linhas** | `orchestrator.py` decomposto em 6 módulos, prompts em pacote próprio, pylint `max-module-lines=400` | ✅ |
 | **3. Contract-First** | Pydantic models: `Classification`, `InvestigationContext`, `StructuralAnalysis`, `DeepModel`, `AnalysisResult` | ⚠️ parcial |
-| **4. Testes Determinísticos** | 153 testes com fixtures em memória, respostas LLM mockadas, testes de integração (413/429/fallback) | ✅ |
-| **5. Sistemas Autodescritivos** | `.iac/structure.json`, `.iac/graph.json`, `docs/ARCHITECTURE.md`, docstrings Google style, logging por camada | ✅ |
+| **4. Testes Determinísticos** | 198 testes com fixtures em memória, respostas LLM mockadas, testes de integração e end-to-end do init | ✅ |
+| **5. Sistemas Autodescritivos** | `.iac/structure.json`, `.iac/profile.yaml`, `docs/ARCHITECTURE.md`, docstrings Google style, logging por camada | ✅ |
 | **6. Verificação Automatizada** | `ruff` (lint + docstrings), `pylint` (tamanho), `pytest`, GitHub Actions CI, `.pre-commit-config.yaml` | ✅ |
 
 Scorecard detalhado: [issue #36](https://github.com/jailtoncarlos/incident-analyst-agent/issues/36#issuecomment-4212053047).
@@ -89,7 +89,12 @@ src/iac/
 │
 ├── config/
 │   ├── app_settings.py        # AppSettings — Pydantic Settings + env vars
-│   └── settings.py            # Load/save .iac/ files + config.yaml + .env
+│   └── settings.py            # Load/save .iac/ files, profile.yaml, .env
+│
+├── defaults/                  # Templates genéricos (copiados pelo iac init)
+│   ├── env.template           # Template do .env (todas as variáveis)
+│   ├── profile.yaml           # Defaults de merge (taxonomy + aliases)
+│   └── profile.init.yaml      # Template do profile (vazio com orientações)
 │
 ├── inspector/                 # Camada 1 — Inspeção estrutural
 │   ├── detector.py            # Detecta framework (Django/Flask/FastAPI)
@@ -116,10 +121,10 @@ src/iac/
 │       ├── analysis.py        # Prompt single-prompt (com ajuste progressivo)
 │       ├── multi.py           # Prompts multi-prompt (investigação + evidência)
 │       ├── response.py        # Prompt de relatório técnico para o dev
-│       └── utils.py           # Extração de tipo, taxonomia, compactação
+│       └── utils.py           # Extração de tipo (taxonomia via profile)
 │
 ├── analyzer/
-│   ├── classifier.py          # Classificação sem LLM (origem, app, interessado)
+│   ├── classifier.py          # Classificação sem LLM (genérico, padrões via profile)
 │   └── simulator.py           # Simulação em ambiente controlado (stub — #44)
 │
 ├── integrations/
@@ -136,49 +141,93 @@ src/iac/
         └── app_detail.html    # Detalhe por app
 ```
 
-## Configuração via .env
+## Configuração
 
-Todas as variáveis em `.iac/.env`, carregado automaticamente. CLI args sempre têm prioridade.
+Dois arquivos no `.iac/` do projeto inspecionado:
+
+### `.env` — variáveis de ambiente (tokens, backend, rate limit)
 
 ```bash
-# GitLab
 GITLAB_TOKEN=glpat-...
-
-# LLM Backend (ollama | groq | deepseek | gemini)
 IAC_LLM_BACKEND=groq
 IAC_LLM_MODEL=llama-3.3-70b-versatile
-
-# Rate limit (genérico — aplica para qualquer backend remoto)
-IAC_LLM_RATE_DELAY=30
-IAC_LLM_MAX_RETRIES=3
-
-# API keys por backend
 GROQ_API_KEY=gsk_...
-# DEEPSEEK_API_KEY=sk-...
-# GEMINI_API_KEY=AIza...
-
-# Modo padrão
 IAC_ANALYZE_MODE=multi
+IAC_LLM_RATE_DELAY=30
 ```
 
-Template completo: `.env.example` na raiz do projeto.
+Hierarquia: `.env` → variáveis de ambiente → CLI args (CLI tem prioridade).
+Template completo: `.env.example` na raiz do IAC.
 
-## Artefatos gerados (.iac/)
+### `profile.yaml` — perfil do projeto (genérico, configurável por cliente)
+
+```yaml
+name: "meu-projeto"
+system_description: "Django"
+issue_patterns:                    # Padrões de template de issue
+  title_regex: '^Erro\s+(\d+)...'
+  origin_name: "erro-sistema"
+app_aliases:                       # Nomes no título → app no código
+  Ensino: edu
+url_skip_segments: [djtools]       # Específicos do projeto (além dos defaults)
+rules:                             # Heurísticas injetadas nos prompts
+  - "Se descrição menciona 'prazo', priorize constantes temporais"
+taxonomy:                          # Tipos + aliases (merge com defaults)
+  aliases:
+    tipo::meu-alias: tipo::bug
+```
+
+O `iac init` gera um profile **vazio com orientações**. Seções não definidas usam defaults genéricos do IAC (6 known_tipos, 18 aliases, 5 url_skip_segments).
+
+Merge: `defaults/profile.yaml` (base) + `.iac/profile.yaml` (projeto sobrescreve/amplia):
+- `system_description`, `rules`: projeto sobrescreve
+- `issue_patterns`, `app_aliases`: merge (default + projeto)
+- `url_skip_segments`: **união**
+- `taxonomy.known_tipos`: **união**
+- `taxonomy.aliases`: merge (projeto tem prioridade)
+
+## Artefatos gerados pelo `iac init`
 
 ```
 .iac/
-├── project.json       # Framework, versão, settings
-├── structure.json     # Mapa de apps/views/models/forms/admin/urls
-├── graph.json         # Grafo de dependências (arestas tipadas)
-├── config.yaml        # Configurações persistentes (opcional, .env preferido)
-├── .env               # Variáveis de ambiente (não commitado)
-├── logs/
-│   ├── iac_YYYYMMDD_HHMMSS.log  # Log DEBUG por execução
-│   └── groq/                     # Logs de bateria Groq
-└── diagrams/
-    ├── overview.html   # Visão geral dos apps
-    └── *.html          # Detalhe por app
+├── project.json           # Framework, versão, settings (inspeção)
+├── structure.json         # Mapa de apps/views/models/forms/admin/urls
+├── graph.json             # Grafo de dependências (arestas tipadas)
+├── .env                   # Template de configuração (comentado)
+├── profile.yaml           # Perfil do projeto (vazio com orientações)
+├── logs/                  # Diretório para logs de execução
+│   └── iac_YYYYMMDD_HHMMSS.log
+└── diagrams/              # Visualizações interativas D3.js
+    ├── overview.html      # Visão geral dos apps
+    └── {app}.html         # Detalhe por app detectado
 ```
+
+## Primeira execução (`iac init`)
+
+```bash
+$ cd /caminho/do/meu-projeto
+$ iac init
+Inspecionando /caminho/do/meu-projeto...
+Inspeção concluída: Django 5.2 — 15 apps, 120 views, 85 models
+  → .iac/.env (template de configuração)
+  → .iac/profile.yaml (perfil do projeto — customize para seu sistema)
+  → .iac/diagrams/ (16 visualizações interativas)
+```
+
+Após o init, o operador edita `.iac/.env` (tokens, backend LLM) e `.iac/profile.yaml` (padrões de issue, app_aliases, rules, taxonomy do seu projeto).
+
+### Testes do init (22 testes)
+
+| Artefato | Teste unitário | Teste E2E |
+|----------|---------------|-----------|
+| `.env` | gerado com variáveis, não sobrescreve | todas as variáveis presentes |
+| `profile.yaml` | vazio, com orientações, nome do projeto | seções vazias, comentários |
+| `project.json` | — | existe |
+| `structure.json` | — | existe com apps detectados |
+| `graph.json` | — | existe com edges |
+| `logs/` | criado | existe |
+| `diagrams/overview.html` | — | existe |
+| `diagrams/{app}.html` | — | por app detectado |
 
 ## Backends LLM
 
@@ -217,14 +266,19 @@ Template completo: `.env.example` na raiz do projeto.
 | Repair prompt | Se resposta tem análise mas não classificou, pede só CLASSIFICAÇÃO |
 | `_enrich_on_repeat()` | Máximo 4 métodos focais quando LLM repete investigação |
 
-### Taxonomia
+### Taxonomia (configurável via profile.yaml)
 
-Labels conhecidos (`KNOWN_TIPOS`): `bug`, `configuracao`, `dados-cadastrais`, `prazo-expirado`, `nao-e-erro`.
+Labels conhecidos (defaults): `bug`, `configuracao`, `dados-cadastrais`, `prazo-expirado`, `nao-e-erro`, `permissao`.
 
-Aliases (`_LABEL_ALIASES`): labels criativos do LLM são normalizados para o catálogo:
-- `avaliacao-nao-disponivel` → `prazo-expirado`
-- `logica-incorreta` → `bug`
-- `acesso-negado` → `permissao`
+Aliases (defaults, 18 mapeamentos): labels criativos do LLM são normalizados:
+- `avaliacao-nao-disponivel`, `tempo-expirado`, `tempo-habil-para-avaliacao` → `prazo-expirado`
+- `logica-incorreta`, `validacao-falhada`, `erro-de-codigo` → `bug`
+- `comportamento-esperado` → `nao-e-erro`
+- `acesso-negado`, `sem-permissao` → `permissao`
+
+O parser aceita labels **com ou sem** prefixo `tipo::` (ex: `bug` → `tipo::bug`).
+
+Clientes podem adicionar tipos e aliases no `profile.yaml → taxonomy`.
 
 ## Tipos de aresta no grafo
 
@@ -277,7 +331,7 @@ Detalhes: [issue #15](https://github.com/jailtoncarlos/incident-analyst-agent/is
 Formato por camada, gravado em `.iac/logs/iac_YYYYMMDD_HHMMSS.log` (DEBUG) e terminal (INFO):
 
 ```
-[Camada 1] Classifier — origem=erro-suap, app=progressao_docente
+[Camada 1] Classifier — origem=erro-sistema, app=loja
 [Camada 2] Orchestrator — 12 calls, 2 refs, 13 passos
 [Camada 3] Structural — 2 models, 1 templates, 6 passos no fluxo
 [Camada 4] Deep — 11 models em profundidade
@@ -292,7 +346,7 @@ Formato por camada, gravado em `.iac/logs/iac_YYYYMMDD_HHMMSS.log` (DEBUG) e ter
 - **Lint:** `ruff` com 11 categorias de regras (E, F, W, I, N, UP, S, B, SIM, PIE, D)
 - **Docstrings:** Google convention obrigatória (`pydocstyle`)
 - **Tamanho de módulo:** `pylint` com `max-module-lines=400` (`.pylintrc`)
-- **Testes:** 153 testes (unitários + integração + regressão)
+- **Testes:** 198 testes (unitários + integração + regressão + E2E do init)
 - **CI:** GitHub Actions (ruff + pylint + pytest em cada push)
 - **Pre-commit:** `ruff-format` + `ruff check` + `pylint` (tamanho de módulo)
 
@@ -300,8 +354,8 @@ Formato por camada, gravado em `.iac/logs/iac_YYYYMMDD_HHMMSS.log` (DEBUG) e ter
 
 | Milestone | Estado | Issues |
 |-----------|--------|--------|
-| [v0.1 — Inspeção e Análise](https://github.com/jailtoncarlos/incident-analyst-agent/milestone/1) | ✅ fechada | 18 fechadas |
-| [v0.2 — Qualidade da Análise LLM](https://github.com/jailtoncarlos/incident-analyst-agent/milestone/3) | em aberto | #7, #39, #50, #52, #53, #54 |
+| [v0.1 — Inspeção e Análise](https://github.com/jailtoncarlos/incident-analyst-agent/milestone/1) | ✅ fechada | 19 fechadas |
+| [v0.2 — Qualidade da Análise LLM](https://github.com/jailtoncarlos/incident-analyst-agent/milestone/3) | em aberto | #7, #39, #50, #58, #62, #64 |
 | [v0.3 — Simulação e Verificação](https://github.com/jailtoncarlos/incident-analyst-agent/milestone/4) | em aberto | #4, #6, #8, #44, #59, #60 |
 | [v0.4 — Aprendizado (RAG)](https://github.com/jailtoncarlos/incident-analyst-agent/milestone/5) | em aberto | #55 |
 | [v1.0 — Chatbot Conversacional](https://github.com/jailtoncarlos/incident-analyst-agent/milestone/6) | em aberto | #56 |
@@ -310,10 +364,10 @@ Formato por camada, gravado em `.iac/logs/iac_YYYYMMDD_HHMMSS.log` (DEBUG) e ter
 ## Evolução planejada
 
 ```
-Atual:  Inspeção direta + LLM (4 backends, 4 modos, guardrails)
-v0.2:   Melhorar análise LLM (loop fechamento, multi parse, taxonomia)
-v0.3:   + Simulação no banco (#44) + Relatório unificado (#60)
-v0.4:   + RAG com 8.398 issues do SUAP (#55)
+Atual:  Core genérico + profile.yaml por cliente + 4 backends + 4 modos + guardrails
+v0.2:   Melhorar análise LLM (#58 DeepSeek, #62 core genérico, #64 hardcoded restantes)
+v0.3:   + Simulação no banco (#44) + Relatório unificado (#60) + Gemini produção (#59)
+v0.4:   + RAG com issues já respondidas (#55)
 v1.0:   + Chatbot conversacional (#56)
 Futuro: + Fine-tuning / DPO quando dataset suficiente (#55)
 ```
