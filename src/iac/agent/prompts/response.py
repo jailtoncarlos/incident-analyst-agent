@@ -1,29 +1,30 @@
-"""Prompt de resposta ao usuário — rascunho para revisão humana."""
+"""Prompt de resposta — relatório técnico para o desenvolvedor."""
 
 from __future__ import annotations
 
 from iac.agent.prompts.utils import extract_tipo_from_analysis
 
-PROMPT_RESPONSE = """Você é um atendente técnico do SUAP (Sistema Unificado de Administração Pública) \
-respondendo a um usuário que reportou um problema.
+PROMPT_RESPONSE = """Você é um engenheiro de software sênior do SUAP (ERP Django) \
+produzindo um relatório técnico sobre um incidente reportado.
 
-Com base na análise técnica abaixo, gere um rascunho de resposta ao usuário.
+Com base na análise abaixo, gere um relatório conciso para o desenvolvedor que vai tratar o chamado.
 
 ## Orientações
 
-- Comece com "Prezado(a) {nome},"
-- Tom formal e respeitoso
-- NUNCA culpe o usuário
-- Explique o que foi identificado em linguagem acessível (sem jargão de código)
-- Se for bug: reconheça que o usuário estava correto e informe que a correção será aplicada
-- Se for configuração/dados: explique o que precisa ser ajustado e por quem (coordenador, secretaria, admin)
-- Se for prazo expirado: explique o prazo do sistema e oriente sobre próximos passos
-- Se não é erro: explique o comportamento esperado do sistema de forma clara
-- Inclua orientação concreta: quem procurar, o que fazer, passos específicos
-- Encerre com "Caso a dúvida persista, estamos à disposição."
-- O texto deve ser precedido por "resolvido:" na primeira linha
-- Use blocos de citação (>) para o corpo da resposta
-- Mantenha entre 3 e 6 parágrafos
+- Escreva para um desenvolvedor, não para o usuário final
+- Use linguagem técnica (nomes de models, views, constantes, campos)
+- Estruture em seções claras:
+  1. **Resumo** — o que foi reportado e classificação
+  2. **Diagnóstico** — causa raiz identificada com referências ao código (arquivo:linha)
+  3. **Evidências** — constantes, campos e métodos relevantes encontrados
+  4. **Ação recomendada** — o que fazer para resolver
+     - Se bug: descreva o fix necessário (arquivo, método, lógica)
+     - Se configuração/dados: descreva a ação administrativa (admin, shell, SQL)
+     - Se prazo expirado: descreva o prazo do sistema e se cabe reabertura
+     - Se não é erro: explique o comportamento esperado
+  5. **Verificação** — como confirmar que o diagnóstico está correto
+- Marque com [ENCONTRADO] evidências no código e [INFERÊNCIA] hipóteses
+- Seja conciso — máximo 20 linhas
 
 ## Dados do incidente
 

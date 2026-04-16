@@ -19,5 +19,7 @@ from iac.agent.prompts.response import build_response_prompt  # noqa: F401
 from iac.agent.prompts.utils import (  # noqa: F401
     _strip_context_header,
     compact_code,
+    extract_classificacao,
     extract_tipo_from_analysis,
+    normalize_to_known,
 )

@@ -32,15 +32,19 @@ TEMPLATE_ANALYSIS = """### 1. Análise do código
 - Correlacione a descrição do usuário com constantes e campos do código (ex: se o usuário menciona "prazo" ou "tempo", verifique constantes de tempo como TEMPO_AVALIACAO)
 
 ### 3. Classificação
-Classifique a causa raiz com um label no formato `tipo::nome`. Exemplos comuns:
-- `tipo::bug` — erro real de código (lógica incorreta, exceção não tratada)
-- `tipo::configuracao` — configuração do sistema inadequada
-- `tipo::dados-cadastrais` — dados incorretos no banco
-- `tipo::prazo-expirado` — funcionalidade bloqueada por prazo/data
-- `tipo::nao-e-erro` — comportamento esperado do sistema
+Classifique com dois níveis:
 
-Se nenhum dos exemplos se aplica, crie um label descritivo (ex: `tipo::permissao`, `tipo::integracao`).
-Escreva: CLASSIFICAÇÃO: tipo::nome-escolhido
+**CLASSIFICAÇÃO:** label principal — o que é o problema.
+**SUBCLASSIFICAÇÃO:** label secundário — o motivo específico.
+
+Exemplos:
+- CLASSIFICAÇÃO: tipo::bug / SUBCLASSIFICAÇÃO: tipo::logica-incorreta
+- CLASSIFICAÇÃO: tipo::nao-e-erro / SUBCLASSIFICAÇÃO: tipo::prazo-expirado
+- CLASSIFICAÇÃO: tipo::nao-e-erro / SUBCLASSIFICAÇÃO: tipo::configuracao
+- CLASSIFICAÇÃO: tipo::bug / SUBCLASSIFICAÇÃO: tipo::excecao-nao-tratada
+
+Labels comuns: `bug`, `configuracao`, `dados-cadastrais`, `prazo-expirado`, `nao-e-erro`, `permissao`.
+Se nenhum se aplica, crie um descritivo.
 
 ### 4. Sugestão de resolução
 - Se bug: inclua diff sugerido (antes/depois com arquivo:linha)
@@ -62,11 +66,12 @@ REGRAS:
 - Correlacione sempre a descrição do usuário com o código analisado"""
 
 
-def build_analysis_prompt(result: dict) -> str:
+def build_analysis_prompt(result: dict, include_deep: bool = True) -> str:
     """Constrói o prompt de análise completo (modo single-prompt).
 
     Args:
         result: Dict retornado por analyze_issue() com structural, context e deep.
+        include_deep: Se False, omite a análise profunda do prompt (útil para modelos pequenos).
 
     Returns:
         Prompt completo para enviar ao LLM.
@@ -82,12 +87,13 @@ def build_analysis_prompt(result: dict) -> str:
         sections.append('\n---\n')
         sections.append(context_text)
 
-    deep = result.get('deep', [])
-    if deep:
-        deep_text = format_deep_analysis(deep)
-        if deep_text.strip():
-            sections.append('\n---\n')
-            sections.append(deep_text)
+    if include_deep:
+        deep = result.get('deep', [])
+        if deep:
+            deep_text = format_deep_analysis(deep)
+            if deep_text.strip():
+                sections.append('\n---\n')
+                sections.append(deep_text)
 
     sections.append('\n---\n')
     sections.append(TEMPLATE_ANALYSIS)

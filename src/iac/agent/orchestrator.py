@@ -56,7 +56,7 @@ def get_model_profile(model_name: str | None) -> dict:
 
     name = model_name.lower()
 
-    if any(api in name for api in ('gemini', 'gpt', 'claude', 'sonnet', 'opus')):
+    if any(api in name for api in ('gemini', 'gpt', 'claude', 'sonnet', 'opus', 'groq')):
         return MODEL_PROFILES['large']
 
     size_match = re.search(r':?(\d+)[bB]', name)

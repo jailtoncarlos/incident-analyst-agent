@@ -124,7 +124,7 @@ def test_response_prompt_has_orientations():
     analysis = 'CLASSIFICAÇÃO: tipo::configuracao\nOrientação ao responsável.'
     prompt = build_response_prompt(result, analysis)
     assert 'João Silva' in prompt
-    assert 'Prezado(a)' in prompt
+    assert 'desenvolvedor' in prompt
     assert 'tipo::configuracao' in prompt
     assert 'Orientação ao responsável' in prompt
 
@@ -135,7 +135,7 @@ def test_response_prompt_has_analysis():
     prompt = build_response_prompt(result, analysis)
     assert 'João Silva' in prompt
     assert 'Erro no código' in prompt
-    assert 'NUNCA culpe' in prompt
+    assert 'Diagnóstico' in prompt
 
 
 # ---------------------------------------------------------------------------

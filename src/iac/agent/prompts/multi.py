@@ -58,15 +58,16 @@ Agora, com base em TODA a evidência (código da view + código adicional acima)
 - Correlacione a descrição do usuário com constantes e campos do código (ex: se o usuário menciona "prazo" ou "tempo", verifique constantes de tempo)
 
 ### 3. Classificação
-Classifique a causa raiz com um label no formato `tipo::nome`. Exemplos comuns:
-- `tipo::bug` — erro real de código
-- `tipo::configuracao` — configuração inadequada
-- `tipo::dados-cadastrais` — dados incorretos no banco
-- `tipo::prazo-expirado` — funcionalidade bloqueada por prazo/data
-- `tipo::nao-e-erro` — comportamento esperado
+Classifique com dois níveis:
 
-Se nenhum se aplica, crie um label descritivo.
-Escreva: CLASSIFICAÇÃO: tipo::nome-escolhido
+**CLASSIFICAÇÃO:** label principal — o que é o problema.
+**SUBCLASSIFICAÇÃO:** label secundário — o motivo específico.
+
+Exemplos:
+- CLASSIFICAÇÃO: tipo::nao-e-erro / SUBCLASSIFICAÇÃO: tipo::prazo-expirado
+- CLASSIFICAÇÃO: tipo::bug / SUBCLASSIFICAÇÃO: tipo::logica-incorreta
+
+Labels comuns: `bug`, `configuracao`, `dados-cadastrais`, `prazo-expirado`, `nao-e-erro`, `permissao`.
 
 ### 4. Sugestão de resolução
 - Se bug: diff sugerido (antes/depois com arquivo:linha)
@@ -131,6 +132,14 @@ def parse_investigation_requests(llm_response: str) -> list[dict]:
         if '/templates/' in target or target.endswith('.html'):
             logger.debug(f'Pedido ignorado (template): {target}')
             continue
+        # Rejeitar expressões encadeadas (request.user.get_relacionamento().matricula)
+        if '()' in target or target.count('.') > 4:
+            logger.debug(f'Pedido ignorado (expressão complexa): {target}')
+            continue
+        # Rejeitar query fragments (Model.filter(...), Model.objects.get(...))
+        if re.search(r'\.(filter|objects|get|exclude|annotate|aggregate)\b', target):
+            logger.debug(f'Pedido ignorado (query fragment): {target}')
+            continue
 
         parts = target.split('.')
         if len(parts) >= 4 and parts[1] == 'models':
@@ -181,24 +190,59 @@ def resolve_investigation_requests(requests: list[dict], structure: dict, graph:
                         sections.append(f'```python\n{src}\n```\n')
                         continue
 
-                # Fallback: method pode ser um field ou atributo — retornar model com fields + constantes
-                is_field = req['method'] in model_data.get('fields', [])
-                is_attr = req['method'] in ('objects',) or req['method'] in model_data.get('constants', {})
-                if is_field or is_attr or not method_line:
-                    sections.append(f'### `{fqn}` ({loc["file"]}:{loc["line"]})\n')
-                    fields = model_data.get('fields', [])
-                    if fields:
-                        sections.append(f'**Fields:** {", ".join(f"`{f}`" for f in fields[:20])}\n')
-                    constants = model_data.get('constants', {})
-                    if constants:
-                        sections.append('**Constantes:**')
-                        for name, value in constants.items():
-                            sections.append(f'- `{name} = {value}`')
+                # Fallback: evidência focal — destacar o que foi pedido + contexto relevante
+                requested = req['method']
+                constants = model_data.get('constants', {})
+                fields = model_data.get('fields', [])
+                methods = model_data.get('methods', {})
+
+                sections.append(f'### `{fqn}` — foco em `{requested}` ({loc["file"]}:{loc["line"]})\n')
+
+                # Destacar a constante/field pedida
+                if requested in constants:
+                    sections.append(f'**→ `{requested} = {constants[requested]}`**\n')
+                elif requested in fields:
+                    sections.append(f'**→ Campo `{requested}` encontrado no model**\n')
+
+                # Fields temporais/relevantes (não todos)
+                temporal_fields = [f for f in fields if any(k in f for k in ('data_', 'prazo', 'tempo', 'periodo', 'situacao', 'status'))]
+                if temporal_fields:
+                    sections.append(f'**Campos relevantes:** {", ".join(f"`{f}`" for f in temporal_fields)}\n')
+
+                # Métodos que referenciam a constante pedida
+                related_methods = []
+                for m_name in methods:
+                    if requested.lower() in m_name.lower():
+                        related_methods.append(m_name)
+                # Incluir código dos métodos relacionados
+                if related_methods:
+                    sections.append(f'**Métodos relacionados a `{requested}`:**\n')
+                    for m_name in related_methods:
+                        m_line = methods[m_name].get('line')
+                        if m_line:
+                            src = ler_funcao(loc['file'], m_line, Path(base_dir), max_lines=15)
+                            if src:
+                                sections.append(f'`{m_name}` (linha {m_line}):')
+                                sections.append(f'```python\n{src}\n```\n')
+                        else:
+                            sections.append(f'- `{m_name}`\n')
+
+                # Constantes apenas se poucas, senão só as temporais
+                if len(constants) <= 5:
+                    sections.append('**Constantes:**')
+                    for name, value in constants.items():
+                        marker = ' ← pedido' if name == requested else ''
+                        sections.append(f'- `{name} = {value}`{marker}')
+                    sections.append('')
+                else:
+                    temporal_constants = {k: v for k, v in constants.items() if any(t in k.lower() for t in ('tempo', 'prazo', 'dias', 'periodo'))}
+                    if temporal_constants:
+                        sections.append('**Constantes temporais:**')
+                        for name, value in temporal_constants.items():
+                            marker = ' ← pedido' if name == requested else ''
+                            sections.append(f'- `{name} = {value}`{marker}')
                         sections.append('')
-                    methods = model_data.get('methods', {})
-                    if methods:
-                        sections.append(f'**Métodos:** {", ".join(f"`{m}`" for m in list(methods.keys())[:15])}\n')
-                    continue
+                continue
 
             sections.append(f'### `{fqn}.{req["method"]}` — não encontrado\n')
 
