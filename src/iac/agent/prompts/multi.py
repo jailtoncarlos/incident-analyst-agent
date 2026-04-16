@@ -14,7 +14,7 @@ from iac.agent.structural import format_structural_analysis
 
 logger = logging.getLogger(__name__)
 
-PROMPT_INVESTIGATION = """Você é um engenheiro de software sênior investigando uma issue de erro de produção do SUAP (ERP Django).
+PROMPT_INVESTIGATION = """Você é um engenheiro de software sênior investigando uma issue de erro de produção de um sistema {system_description}.
 
 Analise os dados abaixo e o código da view. Depois, liste exatamente o que você PRECISA VER para entender a causa raiz.
 
@@ -82,18 +82,26 @@ Para confirmar a análise, indique o que verificar:
 - **O que verificar no banco:** dados a consultar para confirmar a hipótese
 - **O que verificar como admin:** ação administrativa para validar
 
-REGRAS: Seja conciso. Use apenas o código fornecido. Não invente código. Correlacione sempre a descrição do usuário com o código."""
+REGRAS:
+- Seja conciso. Use apenas o código fornecido. Não invente código.
+- Correlacione sempre a descrição do usuário com o código.
+- Se há evidência temporal (constantes TEMPO_*, datas, prazos) E evidência de acesso (PermissionDenied, eh_aluno), priorize a temporal como causa raiz — checks de acesso são geralmente gates de segurança, não causa do problema reportado.
+{rules}"""
 
 
-def build_investigation_prompt(result: dict) -> str:
+def build_investigation_prompt(result: dict, profile: dict | None = None) -> str:
     """Prompt 1: LLM analisa a view e lista o que precisa investigar.
 
     Args:
         result: Dict retornado por analyze_issue() com structural e context.
+        profile: Perfil do cliente (.iac/profile.yaml).
 
     Returns:
         Prompt formatado para enviar ao LLM no modo multi-prompt.
     """
+    profile = profile or {}
+    system_desc = profile.get('system_description', 'Django')
+
     structural_text = format_structural_analysis(result['structural'])
     context_text = format_context_for_prompt(result['context'])
     context_text = _strip_context_header(context_text)
@@ -102,7 +110,7 @@ def build_investigation_prompt(result: dict) -> str:
     if context_text.strip():
         context += '\n---\n' + context_text
 
-    return PROMPT_INVESTIGATION.format(context=context)
+    return PROMPT_INVESTIGATION.format(context=context, system_description=system_desc)
 
 
 def parse_investigation_requests(llm_response: str) -> list[dict]:
@@ -290,18 +298,23 @@ def resolve_investigation_requests(requests: list[dict], structure: dict, graph:
     return '\n'.join(sections)
 
 
-def build_evidence_prompt(evidence: str, view_context: str | None = None) -> str:
+def build_evidence_prompt(evidence: str, view_context: str | None = None, profile: dict | None = None) -> str:
     """Prompt 2: LLM recebe código adicional e faz análise completa.
 
     Args:
         evidence: Código dos models/métodos investigados.
         view_context: Código da view (do prompt 1, para não perder contexto).
+        profile: Perfil do cliente (.iac/profile.yaml).
 
     Returns:
         Prompt formatado com evidência + instruções de análise.
     """
+    profile = profile or {}
+    rules = profile.get('rules', [])
+    rules_text = '\n'.join(f'- {r}' for r in rules) if rules else ''
+
     full_evidence = ''
     if view_context:
         full_evidence += view_context + '\n\n---\n\n'
     full_evidence += evidence
-    return PROMPT_EVIDENCE.format(evidence=full_evidence)
+    return PROMPT_EVIDENCE.format(evidence=full_evidence, rules=rules_text)

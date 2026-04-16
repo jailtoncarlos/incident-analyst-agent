@@ -86,6 +86,7 @@ def analyze_issue(
     max_steps: int | None = None,
     max_context_chars: int | None = None,
     max_refs: int | None = None,
+    profile: dict | None = None,
 ) -> dict:
     """Ponto de entrada único para análise completa de um incidente.
 
@@ -101,21 +102,23 @@ def analyze_issue(
         max_steps: Sobrescreve o limite de passos do perfil.
         max_context_chars: Sobrescreve o limite de contexto do perfil.
         max_refs: Sobrescreve o limite de referências do perfil.
+        profile: Perfil do cliente (.iac/profile.yaml).
 
     Returns:
         Dict com classification, context, structural, deep e profile.
     """
-    profile = get_model_profile(model_name)
-    _max_steps = max_steps or profile['max_steps']
-    _max_context_chars = max_context_chars or profile['max_context_chars']
-    _max_refs = max_refs or profile['max_refs']
+    client_profile = profile or {}
+    model_profile = get_model_profile(model_name)
+    _max_steps = max_steps or model_profile['max_steps']
+    _max_context_chars = max_context_chars or model_profile['max_context_chars']
+    _max_refs = max_refs or model_profile['max_refs']
 
     logger.info(f'[analyze_issue] Entrada: title="{title}", model={model_name}')
     logger.debug(f'[analyze_issue] Perfil: steps={_max_steps}, context={_max_context_chars}, refs={_max_refs}')
 
     # Camada 1: Classifier
     logger.info('[Camada 1] Classifier — extraindo metadados da descrição')
-    classification = classify(title, description)
+    classification = classify(title, description, profile=client_profile)
     logger.info(f'[Camada 1] Resultado: origem={classification["origem"]}, app={classification.get("app")}, erro_id={classification.get("erro_id")}')
     logger.debug('[Camada 1] Classifier retornou:\n' + fmt_dict(classification))
 
@@ -146,9 +149,9 @@ def analyze_issue(
     logger.info('[Camada 4] Deep — navegando FKs em profundidade')
     deep = deep_investigate(
         ctx, structure, graph, base_dir,
-        max_depth=profile['deep_max_depth'],
-        max_context_chars=profile['deep_max_context_chars'],
-        include_methods=profile['deep_include_methods'],
+        max_depth=model_profile['deep_max_depth'],
+        max_context_chars=model_profile['deep_max_context_chars'],
+        include_methods=model_profile['deep_include_methods'],
     )
     logger.info(f'[Camada 4] Resultado: {len(deep)} models em profundidade')
     logger.debug('[Camada 4] models:\n' + '\n'.join(
@@ -162,7 +165,7 @@ def analyze_issue(
         'context': ctx,
         'structural': structural,
         'deep': deep,
-        'profile': profile,
+        'profile': model_profile,
     }
 
 

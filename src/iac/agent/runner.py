@@ -72,23 +72,22 @@ def send_to_llm(prompt: str, llm: str, llm_model: str, llm_url: str | None, llm_
     return result
 
 
-def run_single(result: dict, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> str | None:
+def run_single(result: dict, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None, profile: dict | None = None) -> str | None:
     """Executa análise em modo single-prompt com ajuste progressivo.
 
     Se o prompt for grande demais (413), reduz progressivamente:
     1. Com deep → 2. Sem deep → 3. Desiste.
     """
-    profile = get_model_profile(llm_model)
-    include_deep = profile.get('deep_include_methods', True)
-    prompt = build_analysis_prompt(result, include_deep=include_deep)
+    model_profile = get_model_profile(llm_model)
+    include_deep = model_profile.get('deep_include_methods', True)
+    prompt = build_analysis_prompt(result, include_deep=include_deep, profile=profile)
     logger.info(f'[LLM] Modo single-prompt: {len(prompt)} chars (deep={include_deep}) → enviando ao {llm} ({llm_model})')
 
     analysis = send_to_llm(prompt, llm, llm_model, llm_url, llm_key)
 
-    # Ajuste progressivo: se prompt grande demais, reduzir
     if analysis == 'PROMPT_TOO_LARGE' and include_deep:
         logger.info('[LLM] Prompt muito grande — retentando sem deep')
-        prompt = build_analysis_prompt(result, include_deep=False)
+        prompt = build_analysis_prompt(result, include_deep=False, profile=profile)
         logger.info(f'[LLM] Modo single-prompt (sem deep): {len(prompt)} chars → enviando ao {llm} ({llm_model})')
         analysis = send_to_llm(prompt, llm, llm_model, llm_url, llm_key)
 
@@ -100,26 +99,12 @@ def run_single(result: dict, llm: str, llm_model: str, llm_url: str | None, llm_
     return analysis
 
 
-def run_multi(result: dict, structure: dict, graph: dict, base_dir, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> str | None:
-    """Executa análise em modo multi-prompt (investigação → evidência → análise).
-
-    Args:
-        result: Dict retornado por analyze_issue().
-        structure: Mapa estrutural (.iac/structure.json).
-        graph: Grafo de dependências (.iac/graph.json).
-        base_dir: Diretório raiz do projeto.
-        llm: Backend LLM.
-        llm_model: Nome do modelo.
-        llm_url: Endpoint da API.
-        llm_key: API key.
-
-    Returns:
-        Texto da análise do LLM ou None.
-    """
+def run_multi(result: dict, structure: dict, graph: dict, base_dir, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None, profile: dict | None = None) -> str | None:
+    """Executa análise em modo multi-prompt (investigação → evidência → análise)."""
     logger.info('[LLM] Modo multi-prompt iniciado')
 
     # Prompt 1: investigação
-    investigation_prompt = build_investigation_prompt(result)
+    investigation_prompt = build_investigation_prompt(result, profile=profile)
     logger.info(f'[LLM] Prompt 1 (investigação): {len(investigation_prompt)} chars → enviando ao {llm} ({llm_model})')
     logger.debug(f'[LLM] Prompt 1 (investigação) conteúdo:\n{investigation_prompt}')
 
@@ -139,7 +124,7 @@ def run_multi(result: dict, structure: dict, graph: dict, base_dir, llm: str, ll
 
     if not requests:
         logger.info('[LLM] Sem pedidos — fallback para single-prompt')
-        return run_single(result, llm, llm_model, llm_url, llm_key)
+        return run_single(result, llm, llm_model, llm_url, llm_key, profile=profile)
 
     # Resolver evidência
     evidence = resolve_investigation_requests(requests, structure, graph, base_dir)
@@ -160,7 +145,7 @@ def run_multi(result: dict, structure: dict, graph: dict, base_dir, llm: str, ll
     if deep_summary:
         evidence += '\n---\n' + deep_summary
 
-    evidence_prompt = build_evidence_prompt(evidence, view_context=view_context)
+    evidence_prompt = build_evidence_prompt(evidence, view_context=view_context, profile=profile)
     logger.info(f'[LLM] Prompt 2 (análise): {len(evidence_prompt)} chars → enviando ao {llm} ({llm_model})')
     logger.debug(f'[LLM] Prompt 2 (análise) conteúdo:\n{evidence_prompt}')
 
@@ -170,31 +155,17 @@ def run_multi(result: dict, structure: dict, graph: dict, base_dir, llm: str, ll
     return analysis
 
 
-def run_auto(result: dict, structure: dict, graph: dict, base_dir, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> dict:
-    """Executa single como fast-path, escala para loop se incerto.
-
-    Args:
-        result: Dict retornado por analyze_issue().
-        structure: Mapa estrutural (.iac/structure.json).
-        graph: Grafo de dependências (.iac/graph.json).
-        base_dir: Diretório raiz do projeto.
-        llm: Backend LLM.
-        llm_model: Nome do modelo.
-        llm_url: Endpoint da API.
-        llm_key: API key.
-
-    Returns:
-        Dict com analysis, tipo, alteracoes, mode_used.
-    """
+def run_auto(result: dict, structure: dict, graph: dict, base_dir, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None, profile: dict | None = None) -> dict:
+    """Executa single como fast-path, escala para loop se incerto."""
     from iac.agent.loop import run_loop
 
     # Passo 1: single como Prompt 0
     logger.info('[auto] Passo 1: single como fast-path')
-    single_analysis = run_single(result, llm, llm_model, llm_url, llm_key)
+    single_analysis = run_single(result, llm, llm_model, llm_url, llm_key, profile=profile)
 
     if not single_analysis:
         logger.warning('[auto] Single sem resposta — fallback para loop')
-        loop_result = run_loop(result, structure, graph, base_dir, llm, llm_model, llm_url, llm_key)
+        loop_result = run_loop(result, structure, graph, base_dir, llm, llm_model, llm_url, llm_key, profile=profile)
         return {**loop_result, 'mode_used': 'loop'}
 
     # Passo 2: avaliar confiança
@@ -203,7 +174,7 @@ def run_auto(result: dict, structure: dict, graph: dict, base_dir, llm: str, llm
 
     if confidence >= 3:
         logger.info('[auto] Resposta confiante — aceitar single')
-        tipo = extract_tipo_from_analysis(single_analysis)
+        tipo = extract_tipo_from_analysis(single_analysis, profile=profile)
         return {
             'analysis': single_analysis,
             'tipo': tipo,
@@ -212,8 +183,21 @@ def run_auto(result: dict, structure: dict, graph: dict, base_dir, llm: str, llm
             'mode_used': 'single',
         }
 
-    # Passo 3: escalar para loop com histórico do single
-    logger.info(f'[auto] Resposta incerta (confiança={confidence}/4) — escalando para loop')
+    # Passo 3: escalar para multi (mais estável que loop)
+    logger.info(f'[auto] Resposta incerta (confiança={confidence}/4) — escalando para multi')
+    multi_analysis = run_multi(result, structure, graph, base_dir, llm, llm_model, llm_url, llm_key, profile=profile)
+    if multi_analysis:
+        tipo = extract_tipo_from_analysis(multi_analysis, profile=profile)
+        return {
+            'analysis': multi_analysis,
+            'tipo': tipo,
+            'alteracoes': [],
+            'iterations': 0,
+            'mode_used': 'single+multi',
+        }
+
+    # Passo 4: se multi também falhou, escalar para loop
+    logger.info('[auto] Multi sem resposta — escalando para loop')
     initial_history = (
         f'**Prompt 0 — SINGLE (análise inicial)**\n\n'
         f'{single_analysis}\n\n'
@@ -224,8 +208,9 @@ def run_auto(result: dict, structure: dict, graph: dict, base_dir, llm: str, llm
         result, structure, graph, base_dir,
         llm, llm_model, llm_url, llm_key,
         initial_history=initial_history,
+        profile=profile,
     )
-    return {**loop_result, 'mode_used': 'single+loop'}
+    return {**loop_result, 'mode_used': 'single+multi+loop'}
 
 
 def _confidence_score(analysis: str) -> int:
@@ -266,25 +251,13 @@ def _confidence_score(analysis: str) -> int:
     return score
 
 
-def run_response(result: dict, llm_analysis: str, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None) -> str | None:
-    """Gera rascunho de resposta ao usuário (prompt 3).
-
-    Args:
-        result: Dict retornado por analyze_issue().
-        llm_analysis: Texto da análise do LLM (prompt 2).
-        llm: Backend LLM.
-        llm_model: Nome do modelo.
-        llm_url: Endpoint da API.
-        llm_key: API key.
-
-    Returns:
-        Texto do rascunho de resposta ou None.
-    """
-    response_prompt = build_response_prompt(result, llm_analysis)
-    logger.info(f'[LLM] Prompt 3 (resposta ao usuário): {len(response_prompt)} chars → enviando ao {llm} ({llm_model})')
+def run_response(result: dict, llm_analysis: str, llm: str, llm_model: str, llm_url: str | None, llm_key: str | None, profile: dict | None = None) -> str | None:
+    """Gera relatório técnico para o desenvolvedor (prompt 3)."""
+    response_prompt = build_response_prompt(result, llm_analysis, profile=profile)
+    logger.info(f'[LLM] Prompt 3 (relatório técnico): {len(response_prompt)} chars → enviando ao {llm} ({llm_model})')
     logger.debug(f'[LLM] Prompt 3 (resposta) conteúdo:\n{response_prompt}')
 
     response_text = send_to_llm(response_prompt, llm, llm_model, llm_url, llm_key)
-    logger.info(f'[LLM] Resposta 3 (resposta ao usuário): {len(response_text or "")} chars')
+    logger.info(f'[LLM] Resposta 3 (relatório técnico): {len(response_text or "")} chars')
     logger.debug(f'[LLM] Resposta 3 (resposta) conteúdo:\n{response_text}')
     return response_text

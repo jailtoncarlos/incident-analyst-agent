@@ -1,0 +1,82 @@
+# =============================================================================
+# IAC — Perfil do projeto (.iac/profile.yaml)
+# =============================================================================
+# Este arquivo configura o IAC para o seu projeto.
+# Gerado pelo `iac init`. Customize conforme o seu sistema.
+#
+# Seções não definidas aqui usam os defaults genéricos do IAC.
+# Documentação: docs/ARCHITECTURE.md
+
+# -----------------------------------------------------------------------------
+# Identificação
+# -----------------------------------------------------------------------------
+# Nome do projeto e descrição usada nos prompts do LLM.
+name: ""
+system_description: "Django"
+
+# -----------------------------------------------------------------------------
+# Padrões de template de issue
+# -----------------------------------------------------------------------------
+# Defina como o seu sistema gera issues de erro.
+# Se não configurar, usa detecção genérica por campos comuns (**View**:, etc).
+#
+# Exemplo:
+#   issue_patterns:
+#     title_regex: '^Erro\s+(\d+)\s*[-\u2013\u2014]\s*(.+)$'
+#     origin_name: "erro-sistema"
+#     origin_marker: "**Erro no Sistema**:"
+#     error_link_regex: '/erro/(\d+)/'
+issue_patterns: {}
+
+# -----------------------------------------------------------------------------
+# Mapeamento de apps
+# -----------------------------------------------------------------------------
+# Nomes legíveis no título da issue → nome do app no código.
+# Usado quando a view não é informada na issue.
+#
+# Exemplo:
+#   app_aliases:
+#     Central de Serviços: centralservicos
+#     Ensino: edu
+app_aliases: {}
+
+# -----------------------------------------------------------------------------
+# Segmentos de URL a ignorar
+# -----------------------------------------------------------------------------
+# Ao detectar app pela URL, esses segmentos são ignorados.
+# Os defaults do IAC já incluem: admin, api, static, media, accounts.
+# Adicione aqui apenas os específicos do seu projeto.
+#
+# Exemplo:
+#   url_skip_segments:
+#     - djtools
+#     - internal
+url_skip_segments: []
+
+# -----------------------------------------------------------------------------
+# Heurísticas de domínio
+# -----------------------------------------------------------------------------
+# Regras injetadas nos prompts do LLM. Adapte ao seu domínio.
+# Ajudam o LLM a priorizar hipóteses corretas.
+#
+# Exemplo:
+#   rules:
+#     - "Se o interessado é Aluno, não assuma erro de permissão sem evidência"
+#     - "Se a descrição menciona 'prazo', priorize constantes temporais"
+rules: []
+
+# -----------------------------------------------------------------------------
+# Taxonomia
+# -----------------------------------------------------------------------------
+# Labels conhecidos e aliases para normalização de classificação.
+# Os defaults do IAC já incluem: bug, configuracao, dados-cadastrais,
+# prazo-expirado, nao-e-erro, permissao (e 18 aliases).
+# Adicione aqui apenas os específicos do seu projeto.
+#
+# Exemplo:
+#   taxonomy:
+#     known_tipos:
+#       - tipo::custom-label
+#     aliases:
+#       tipo::meu-alias: tipo::bug
+taxonomy: {}

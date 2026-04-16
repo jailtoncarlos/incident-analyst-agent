@@ -48,6 +48,87 @@ def main(verbose: bool):
     logging.getLogger('gitlab').setLevel(logging.WARNING)
 
 
+_BACKEND_KEY_ENV = {
+    'groq': 'GROQ_API_KEY',
+    'deepseek': 'DEEPSEEK_API_KEY',
+    'gemini': 'GEMINI_API_KEY',
+}
+
+_BACKEND_URL_ENV = {
+    'groq': 'GROQ_API_URL',
+    'deepseek': 'DEEPSEEK_API_URL',
+    'gemini': 'GEMINI_API_URL',
+}
+
+
+def _resolve_api_key(backend: str | None) -> str | None:
+    """Resolve API key pela variável de ambiente do backend específico."""
+    if backend and backend in _BACKEND_KEY_ENV:
+        return os.environ.get(_BACKEND_KEY_ENV[backend])
+    # Fallback: tentar todas
+    return os.environ.get('GROQ_API_KEY') or os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('GEMINI_API_KEY')
+
+
+def _generate_default_artifacts(iac_dir: Path, result: dict) -> None:
+    """Gera artefatos de configuração padrão se não existem."""
+    framework = result.get('framework', 'Python')
+
+    # .env — copiar template completo
+    env_file = iac_dir / '.env'
+    if not env_file.exists():
+        from iac.config.settings import get_defaults_dir
+
+        env_template = get_defaults_dir() / 'env.template'
+        if env_template.exists():
+            content = env_template.read_text(encoding='utf-8')
+            content = content.replace(
+                'Copie este arquivo para .iac/.env no projeto inspecionado e preencha os valores.',
+                f'Configuração do projeto {iac_dir.parent.name}. Descomente e preencha.',
+            )
+            env_file.write_text(content, encoding='utf-8')
+        click.echo('  → .iac/.env (template de configuração)')
+
+    # profile.yaml — template limpo (sem defaults preenchidos)
+    profile_file = iac_dir / 'profile.yaml'
+    if not profile_file.exists():
+        from iac.config.settings import get_defaults_dir
+
+        init_template = get_defaults_dir() / 'profile.init.yaml'
+        if init_template.exists():
+            content = init_template.read_text(encoding='utf-8')
+            content = content.replace('name: ""', f'name: "{iac_dir.parent.name}"')
+            content = content.replace('system_description: "Django"', f'system_description: "{framework}"')
+            profile_file.write_text(content, encoding='utf-8')
+        click.echo('  → .iac/profile.yaml (perfil do projeto — customize para seu sistema)')
+
+    # logs/
+    log_dir = iac_dir / 'logs'
+    log_dir.mkdir(exist_ok=True)
+
+    # diagrams/ — overview + detalhe por app
+    try:
+        from iac.config.settings import load_structure
+        from iac.diagram.generator import generate_app_detail_data, generate_overview_data, write_html
+
+        diagrams_dir = iac_dir / 'diagrams'
+        count = 0
+
+        data = generate_overview_data(iac_dir)
+        write_html(diagrams_dir / 'overview.html', 'overview.html', data)
+        count += 1
+
+        structure = load_structure(iac_dir)
+        for app_name in structure.get('apps', {}):
+            app_data = generate_app_detail_data(iac_dir, app_name)
+            if app_data['nodes']:
+                write_html(diagrams_dir / f'{app_name}.html', 'app_detail.html', app_data)
+                count += 1
+
+        click.echo(f'  → .iac/diagrams/ ({count} visualizações interativas)')
+    except Exception as e:
+        logging.getLogger(__name__).debug(f'Diagramas não gerados: {e}')
+
+
 @main.command()
 @click.option('--base-dir', type=click.Path(exists=True), default='.', help='Diretório raiz do projeto.')
 @click.option('--force', is_flag=True, help='Re-inspecionar do zero.')
@@ -76,6 +157,9 @@ def init(base_dir: str, force: bool, stats: bool):
     result = inspect_project(base, force=force)
     click.echo(f'Inspeção concluída: {result["summary"]}')
 
+    # Gerar artefatos de configuração se não existem
+    _generate_default_artifacts(iac_dir, result)
+
 
 @main.command()
 @click.option('--issue-url', type=str, default=None, help='URL da issue no GitLab.')
@@ -83,7 +167,7 @@ def init(base_dir: str, force: bool, stats: bool):
 @click.option('--description', type=str, default=None, help='Descrição do incidente.')
 @click.option('--base-dir', type=click.Path(exists=True), default='.', help='Diretório raiz do projeto.')
 @click.option('--llm', type=click.Choice(['ollama', 'groq', 'deepseek', 'gemini']), envvar='IAC_LLM_BACKEND', default=None, help='Backend LLM (env: IAC_LLM_BACKEND).')
-@click.option('--llm-url', type=str, envvar='IAC_LLM_URL', default=None, help='Endpoint do LLM (env: IAC_LLM_URL).')
+@click.option('--llm-url', type=str, envvar='IAC_LLM_URL', default=None, help='Endpoint do LLM (env: IAC_LLM_URL; backends remotos também aceitam *_API_URL específicos).')
 @click.option('--llm-key', type=str, default=None, help='API key do LLM (env: GROQ_API_KEY, GEMINI_API_KEY).')
 @click.option('--llm-model', type=str, envvar='IAC_LLM_MODEL', default=None, help='Modelo do LLM (env: IAC_LLM_MODEL).')
 @click.option('--gitlab-token', type=str, envvar='GITLAB_TOKEN', default=None, help='Token GitLab (env: GITLAB_TOKEN).')
@@ -111,16 +195,6 @@ def analyze(
         click.echo('Informe --issue-url, --title ou --description.')
         sys.exit(1)
 
-    # Carregar .env se informado via --env-file
-    if env_file:
-        from dotenv import load_dotenv
-        env_path = Path(env_file)
-        if env_path.exists():
-            load_dotenv(env_path, override=False)
-        else:
-            click.echo(f'Arquivo .env não encontrado: {env_file}')
-            sys.exit(1)
-
     base = Path(base_dir).resolve()
     iac_dir = base / IAC_DIR
 
@@ -131,7 +205,7 @@ def analyze(
     # FileHandler em .iac/logs/ — cada execução em arquivo separado
     from datetime import datetime
 
-    from iac.config.settings import get_effective_config, load_graph, load_structure
+    from iac.config.settings import get_effective_config, load_graph, load_profile, load_structure
     log_dir = iac_dir / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
     log_filename = f'iac_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
@@ -145,17 +219,19 @@ def analyze(
     from iac.agent.orchestrator import analyze_issue, format_structural_analysis
     from iac.agent.prompts import extract_classificacao
 
-    # Configuração efetiva: config.yaml + CLI args
+    # Configuração efetiva: .env + CLI args
     cfg = get_effective_config(iac_dir, {
         'llm': llm, 'llm_model': llm_model, 'llm_url': llm_url, 'llm_key': llm_key,
         'gitlab_token': gitlab_token, 'mode': mode,
     })
 
-    # Resolução: CLI args (já com envvar via click) → config.yaml → defaults
+    profile = load_profile(iac_dir)
+
+    # Resolução: CLI args (já com envvar via click) → .env → defaults
     llm = llm or cfg['llm'].get('backend')
     llm_model = llm_model or cfg['llm'].get('model') or 'qwen2.5:7b'
     llm_url = llm_url or cfg['llm'].get('url')
-    llm_key = llm_key or cfg['llm'].get('key') or os.environ.get('GROQ_API_KEY') or os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('GEMINI_API_KEY')
+    llm_key = llm_key or cfg['llm'].get('key') or _resolve_api_key(llm)
     gitlab_token = gitlab_token or cfg['gitlab'].get('token') or os.environ.get('GITLAB_TOKEN')
     mode = mode or cfg['analyze'].get('mode') or 'auto'
 
@@ -177,7 +253,7 @@ def analyze(
         gitlab_url_parsed, project_path, issue_id = parsed
         token = gitlab_token
         if not token:
-            click.echo('Token GitLab necessário. Use --gitlab-token, GITLAB_TOKEN ou config.yaml.')
+            click.echo('Token GitLab necessário. Use --gitlab-token, GITLAB_TOKEN ou .iac/.env.')
             sys.exit(1)
 
         click.echo(f'Buscando issue {issue_id} no GitLab...')
@@ -205,10 +281,16 @@ def analyze(
         sys.exit(1)
 
     # URL default por backend (se não informado)
+    backend_url = os.environ.get(_BACKEND_URL_ENV.get(llm, '')) if llm else None
+    if backend_url:
+        llm_url = backend_url
+
     if llm == 'groq' and (not llm_url or 'localhost' in llm_url):
         llm_url = 'https://api.groq.com/openai/v1/chat/completions'
     elif llm == 'deepseek' and (not llm_url or 'localhost' in llm_url):
         llm_url = 'https://api.deepseek.com/v1/chat/completions'
+    elif llm == 'gemini' and (not llm_url or 'localhost' in llm_url):
+        llm_url = f'https://generativelanguage.googleapis.com/v1beta/models/{llm_model}:generateContent'
 
     logger.info('=== iac analyze iniciado ===')
     logger.info(f'Base dir: {base}')
@@ -229,6 +311,7 @@ def analyze(
         graph=graph,
         base_dir=base,
         model_name=llm_model,
+        profile=profile,
     )
 
     # 3. Exibir análise estrutural
@@ -254,13 +337,13 @@ def analyze(
 
     if llm and effective_mode == 'auto':
         click.echo(f'\n[Modo auto] Single como fast-path + loop se incerto ({llm} {llm_model})...')
-        loop_result = run_auto(result, structure, graph, base, llm, llm_model, llm_url, llm_key)
+        loop_result = run_auto(result, structure, graph, base, llm, llm_model, llm_url, llm_key, profile=profile)
         mode_used = loop_result.get('mode_used', '?')
         click.echo(f'[auto] Modo usado: {mode_used}')
 
     elif llm and effective_mode == 'loop':
         click.echo(f'\n[Modo loop] Análise interativa com {llm} ({llm_model})...')
-        loop_result = run_loop(result, structure, graph, base, llm, llm_model, llm_url, llm_key)
+        loop_result = run_loop(result, structure, graph, base, llm, llm_model, llm_url, llm_key, profile=profile)
         llm_analysis = loop_result.get('analysis')
         if loop_result.get('alteracoes'):
             click.echo(f'\n--- Alterações de código sugeridas ({len(loop_result["alteracoes"])}) ---\n')
@@ -270,11 +353,11 @@ def analyze(
 
     elif llm and effective_mode == 'multi':
         click.echo(f'\n[Modo multi-prompt] Enviando ao {llm} ({llm_model})...')
-        llm_analysis = run_multi(result, structure, graph, base, llm, llm_model, llm_url, llm_key)
+        llm_analysis = run_multi(result, structure, graph, base, llm, llm_model, llm_url, llm_key, profile=profile)
 
     elif llm:
         click.echo(f'\nEnviando prompt ao {llm} ({llm_model})...')
-        llm_analysis = run_single(result, llm, llm_model, llm_url, llm_key)
+        llm_analysis = run_single(result, llm, llm_model, llm_url, llm_key, profile=profile)
 
     if llm_analysis:
         click.echo('\n--- Análise do LLM ---\n')
@@ -297,12 +380,15 @@ def analyze(
 
         logger.info(f'[Resultado] Classificação: tipo={tipo}, subtipo={subtipo}, labels={result["classification"].get("labels_sugeridos", [])}')
 
-        if result['classification'].get('interessado'):
-            click.echo('\nGerando resposta ao usuário...')
-            response_text = run_response(result, llm_analysis, llm, llm_model, llm_url, llm_key)
+        if result['classification'].get('interessado') and tipo:
+            click.echo('\nGerando relatório técnico...')
+            response_text = run_response(result, llm_analysis, llm, llm_model, llm_url, llm_key, profile=profile)
             if response_text:
-                click.echo('\n--- Rascunho de resposta ---\n')
+                click.echo('\n--- Relatório técnico ---\n')
                 click.echo(response_text)
+        elif not tipo:
+            logger.warning('[LLM] Classificação inconclusiva — relatório técnico não gerado')
+            click.echo('\nClassificação inconclusiva — relatório técnico não gerado.')
     elif llm:
         logger.warning('[LLM] Nenhuma resposta do LLM')
         click.echo('LLM não retornou resposta.')
@@ -334,7 +420,7 @@ def analyze(
 @click.option('--set', 'set_values', multiple=True, help='Definir valor: seção.chave=valor (ex: llm.model=qwen2.5-coder:7b)')
 @click.option('--show', is_flag=True, help='Exibir configuração atual.')
 def config_cmd(base_dir: str, set_values: tuple, show: bool):
-    """Gerencia configuração do projeto (.iac/config.yaml)."""
+    """Gerencia configuração do projeto (.iac/.env)."""
     base = Path(base_dir).resolve()
     iac_dir = base / IAC_DIR
 
@@ -342,31 +428,37 @@ def config_cmd(base_dir: str, set_values: tuple, show: bool):
         click.echo('Nenhuma inspeção encontrada. Execute `iac init` primeiro.')
         sys.exit(1)
 
-    from iac.config.settings import load_user_config, save_user_config
+    from iac.config.settings import get_effective_config
 
-    config = load_user_config(iac_dir)
+    env_file = iac_dir / '.env'
 
     if set_values:
+        lines = env_file.read_text(encoding='utf-8').splitlines() if env_file.exists() else []
         for item in set_values:
             if '=' not in item:
-                click.echo(f'Formato inválido: {item}. Use seção.chave=valor')
+                click.echo(f'Formato inválido: {item}. Use CHAVE=valor')
                 continue
             key, value = item.split('=', 1)
-            parts = key.split('.')
-            if len(parts) == 2:
-                section, field = parts
-                if section not in config:
-                    config[section] = {}
-                config[section][field] = value
-                click.echo(f'{section}.{field} = {value}')
-            else:
-                click.echo(f'Formato inválido: {item}. Use seção.chave=valor')
-
-        save_user_config(iac_dir, config)
+            key = key.upper()
+            # Atualizar ou adicionar
+            updated = False
+            for i, line in enumerate(lines):
+                if line.startswith((f'{key}=', f'# {key}=')):
+                    lines[i] = f'{key}={value}'
+                    updated = True
+                    break
+            if not updated:
+                lines.append(f'{key}={value}')
+            click.echo(f'{key}={value}')
+        env_file.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
     if show or not set_values:
-        import yaml
-        click.echo(yaml.dump(config, default_flow_style=False, allow_unicode=True))
+        config = get_effective_config(iac_dir, {})
+        for section, values in config.items():
+            if isinstance(values, dict):
+                for k, v in values.items():
+                    if v is not None:
+                        click.echo(f'{section}.{k} = {v}')
 
 
 @main.command()
